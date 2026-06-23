@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Planning Endoscopie 2026</title>
+<style>
+:root{
+  --bg:#f6f8fa;--surf:#fff;--bd:#d0d7de;
+  --blue:#0969da;--blue-bg:#ddf4ff;--blue-dk:#0550ae;
+  --gbtn:#2da44e;--red:#cf222e;--red-bg:#ffebe9;
+  --ora:#bc4c00;--yel:#9a6700;--yel-bg:#fff8c5;
+  --text:#24292f;--t2:#57606a;--t3:#8c959f;--head:#24292f;--r:6px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--head)}
+.login-box{background:#fff;border-radius:14px;padding:36px 32px;width:340px;max-width:95vw;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.35)}
+.login-logo{font-size:40px;margin-bottom:12px}
+.login-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--t2);margin-bottom:24px}
+.login-input{width:100%;padding:10px 14px;border:1px solid var(--bd);border-radius:var(--r);font-size:16px;font-family:var(--font);text-align:center;letter-spacing:2px;margin-bottom:12px}
+.login-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(9,105,218,.15)}
+.login-btn{width:100%;padding:10px;background:var(--gbtn);color:#fff;border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)}
+.login-btn:hover{background:#2c974b}
+.login-error{color:var(--red);font-size:13px;margin-top:10px;min-height:20px}
+.login-hint{font-size:11px;color:var(--t3);margin-top:16px;line-height:1.6}
+.role-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.rb-admin{background:#dafbe1;color:#1a7f37}
+.rb-med{background:#ddf4ff;color:#0550ae}
+.rb-lec{background:#f6f8fa;color:#57606a}
+
+/* ── APP (masqué par défaut) ── */
+.app{display:none}
+.bar{background:var(--head);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:200}
+.bar-logo{font-size:20px}.bar-title{color:#e6edf3;font-size:15px;font-weight:600}.bar-sub{color:#7d8590;font-size:12px}
+.bar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.bar-role{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 14px;border-radius:var(--r);border:1px solid;cursor:pointer;font-size:13px;font-family:var(--font);font-weight:500;transition:all .15s}
+.btn-g{background:var(--gbtn);border-color:rgba(0,0,0,.15);color:#fff}.btn-g:hover{background:#2c974b}
+.btn-d{background:var(--surf);border-color:var(--bd);color:var(--text)}.btn-d:hover{background:var(--bg)}
+.btn-r{background:var(--surf);border-color:var(--bd);color:var(--red)}.btn-r:hover{background:var(--red-bg)}
+.wrap{max-width:1300px;margin:0 auto;padding:20px}
+.tabs{border-bottom:1px solid var(--bd);margin-bottom:18px;display:flex;overflow-x:auto}
+.tab{padding:8px 16px;font-size:14px;color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font);white-space:nowrap;flex-shrink:0}
+.tab:hover{color:var(--text)}.tab.on{color:var(--text);font-weight:600;border-bottom-color:#fd8c73}
+.view{display:none}.view.on{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px;margin-bottom:18px}
+.stat{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:11px 13px}
+.stat-l{font-size:11px;color:var(--t2);margin-bottom:2px}.stat-v{font-size:20px;font-weight:600}.stat-s{font-size:11px;color:var(--t3);margin-top:2px}
+.mnav{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.mnav-btn{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:5px 12px;cursor:pointer;font-size:13px;font-family:var(--font)}.mnav-btn:hover{background:var(--bg)}
+.mnav-title{font-size:16px;font-weight:600;flex:1;text-align:center;min-width:140px}
+.month-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.mpill{padding:3px 11px;border-radius:20px;border:1px solid var(--bd);background:var(--surf);cursor:pointer;font-size:12px;font-weight:500;transition:all .12s}
+.mpill:hover{background:var(--blue-bg);border-color:var(--blue)}.mpill.on{background:var(--head);border-color:var(--head);color:#fff}
+.mf{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.mf-label{font-size:12px;color:var(--t2);flex-shrink:0}
+.mchip{padding:4px 13px;border-radius:20px;border:2px solid var(--bd);background:var(--surf);cursor:pointer;font-size:12px;font-weight:600;transition:all .15s}
+.mchip.on-all{background:var(--head);border-color:var(--head);color:#fff}
+.plan-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r)}
+table.plan{width:100%;border-collapse:collapse;min-width:500px}
+table.plan th{padding:7px 9px;background:var(--bg);border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--t2);text-align:center;white-space:nowrap}
+table.plan th:first-child,table.plan th:nth-child(2),table.plan th:nth-child(3){text-align:left}
+table.plan td{padding:4px 7px;border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:12px;vertical-align:middle}
+table.plan tr:last-child td{border-bottom:none}
+table.plan td:last-child,table.plan th:last-child{border-right:none}
+.sep td{border-top:2px solid #b0c4de}
+.td-date{font-weight:600;color:var(--blue-dk);white-space:nowrap;background:var(--surf)}
+.td-jour{color:var(--t2);text-align:center;white-space:nowrap;background:var(--surf);font-size:11px}
+.td-cren{font-weight:500;white-space:nowrap;font-size:12px}
+.s-bm{background:#e8f5e9;color:#1b5e20}.s-bam{background:#c8e6c9;color:#1b5e20}
+.s-cL{background:#fff3e0;color:#e65100}.s-cP{background:#e3f2fd;color:#0d47a1}.s-et{background:#fff9c4;color:#f57f17}
+.mc{text-align:center;min-width:52px;position:relative}
+.mc.clickable{cursor:pointer;transition:background .1s}.mc.clickable:hover:not(.mc-ind){filter:brightness(.92)}
+.mc-check{font-size:14px;font-weight:700;display:block}
+.mc-ind{background:var(--red-bg)!important;cursor:default}
+.mc-ind-txt{font-size:9px;color:var(--red);display:block}
+.mc-vide{background:#f0f0f0!important}
+.mc-vide-txt{font-size:9px;color:var(--t3);display:block}
+.mc-mod{position:absolute;top:1px;right:2px;font-size:9px;color:var(--ora)}
+.eq-wrap{overflow-x:auto}
+.eq-table{width:100%;border-collapse:collapse;background:var(--surf);border:1px solid var(--bd);border-radius:var(--r)}
+.eq-table th{padding:9px 11px;background:var(--bg);border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--t2);text-align:center}
+.eq-table th:first-child{text-align:left}
+.eq-table td{padding:8px 11px;border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:12px;text-align:center}
+.eq-table td:first-child{text-align:left;font-weight:600}
+.eq-table tr:last-child td,.eq-table td:last-child,.eq-table th:last-child{border-right:none;border-bottom:none}
+.eq-bar{height:4px;border-radius:2px;margin-top:2px;min-width:3px}
+.eq-warn{display:flex;gap:8px;padding:10px 14px;background:var(--yel-bg);border:1px solid #d4a72c;border-radius:var(--r);font-size:13px;margin-bottom:14px}
+.ind-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:13px;margin-bottom:10px}
+.ind-chips{display:flex;flex-wrap:wrap;gap:5px}
+.ind-chip{padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500}
+.ind-saisie{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:700px){.ind-saisie{grid-template-columns:1fr}}
+.cal-months{display:flex;flex-direction:column;gap:12px}
+.cal-block{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.cal-block-hdr{padding:8px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:space-between}
+.cal-mo-cnt{font-size:11px;color:var(--t2);font-weight:400}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);padding:5px;gap:2px}
+.cal-hdr{text-align:center;font-size:10px;font-weight:600;color:var(--t2);padding:2px 0}
+.cal-hdr.we{color:var(--red)}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:5px;font-size:12px;font-weight:500;transition:all .12s;position:relative;user-select:none}
+.cal-day.clickable{cursor:pointer}
+.cal-day.clickable:hover:not(.empty):not(.we-day){background:var(--blue-bg);color:var(--blue)}
+.cal-day.empty{visibility:hidden;cursor:default}
+.cal-day.we-day{color:var(--t3);cursor:default;font-size:11px;font-weight:400}
+.cal-day.i-multi{background:linear-gradient(135deg,#ffebe9 50%,#ddeeff 50%)}
+.cal-day.today-r{box-shadow:0 0 0 2px var(--blue)}
+.cal-dot{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
+.imc-wrap{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.imc{padding:5px 13px;border-radius:20px;border:2px solid var(--bd);background:var(--surf);cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.side-panel{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;position:sticky;top:65px}
+.side-hdr{padding:9px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:space-between}
+.sr{display:flex;align-items:center;gap:7px;padding:7px 13px;border-bottom:1px solid var(--bd);font-size:12px}
+.sr:last-child{border-bottom:none}.sr:hover{background:var(--bg)}
+.sr-del{background:none;border:none;color:var(--t3);cursor:pointer;padding:3px 5px;border-radius:4px;font-size:12px}
+.sr-del:hover{color:var(--red);background:var(--red-bg)}
+.ind-form{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin-bottom:12px}
+.fld{margin-bottom:9px}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--t2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.fld select,.fld input[type=text],.fld input[type=date]{width:100%;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:var(--font);background:var(--surf);color:var(--text)}
+.fld input[type=color]{height:34px;width:100%;border:1px solid var(--bd);border-radius:var(--r);cursor:pointer;padding:2px}
+.med-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:20px}
+.med-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px}
+.med-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;flex-shrink:0}
+.med-info{flex:1}.med-name{font-weight:700;font-size:15px}.med-sub{font-size:11px;color:var(--t2);margin-top:2px}
+.med-actions{display:flex;gap:5px}
+.add-med-form{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:16px;max-width:400px}
+.med-mois-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+.med-mois-item{padding:4px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;display:flex;align-items:center;gap:5px}
+.al-row{display:flex;align-items:center;gap:10px;padding:8px 13px;border-bottom:1px solid var(--bd);font-size:12px}
+.al-row:last-child{border-bottom:none}
+.al-pill{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--yel-bg);color:var(--yel);font-weight:500;white-space:nowrap}
+.readonly-banner{background:var(--yel-bg);border:1px solid #d4a72c;border-radius:var(--r);padding:9px 14px;font-size:13px;margin-bottom:14px;display:none}
+.readonly-banner.on{display:block}
+.mbg{display:none;position:fixed;inset:0;background:rgba(27,31,36,.5);z-index:500;align-items:center;justify-content:center}
+.mbg.on{display:flex}
+.modal{background:var(--surf);border-radius:12px;border:1px solid var(--bd);padding:22px;width:400px;max-width:95vw;max-height:90vh;overflow-y:auto}
+.mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.mh-title{font-size:15px;font-weight:600}
+.mh-close{background:none;border:none;font-size:18px;color:var(--t2);cursor:pointer;border-radius:4px;padding:2px 6px}.mh-close:hover{background:var(--bg)}
+.msub{font-size:12px;color:var(--t2);margin-bottom:14px}
+.mopts{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
+.mopt{padding:9px;border:1px solid var(--bd);border-radius:var(--r);cursor:pointer;text-align:center;font-size:12px;font-weight:500;transition:all .15s}
+.mopt:hover{border-color:var(--blue);background:var(--blue-bg)}
+.mopt.sel{border-color:var(--blue);background:var(--blue-bg);color:var(--blue-dk)}
+.mopt.rm:hover,.mopt.rm.sel{border-color:var(--red);background:var(--red-bg);color:var(--red)}
+.mfoot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.toast{position:fixed;bottom:22px;right:22px;background:#24292f;color:#fff;padding:9px 15px;border-radius:var(--r);font-size:13px;z-index:999;opacity:0;transform:translateY(5px);transition:all .2s;pointer-events:none}
+.toast.on{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<!-- ══ ÉCRAN DE CONNEXION ══ -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">⚕️</div>
+    <div class="login-title">Planning Endoscopie</div>
+    <div class="login-sub">Juillet — Décembre 2026</div>
+    <input class="login-input" type="password" id="login-code" placeholder="Code d'accès"
+      onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button class="login-btn" onclick="doLogin()">Accéder</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-hint">
+      3 niveaux d'accès :<br>
+      🔴 <strong>Admin</strong> — modification totale<br>
+      🟡 <strong>Médecin</strong> — saisir ses propres indispos<br>
+      🔵 <strong>Lecteur</strong> — consultation seule
+    </div>
+  </div>
+</div>
+
+<!-- ══ APPLICATION ══ -->
+<div class="app" id="app">
+
+<div id="login-screen" style="display:flex;position:fixed;inset:0;background:#f6f8fa;z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border:1px solid #d0d7de;border-radius:12px;padding:32px 36px;width:340px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.12)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:38px;margin-bottom:8px">⚕️</div>
+      <div style="font-size:18px;font-weight:700;color:#24292f">Planning Endoscopie</div>
+      <div style="font-size:13px;color:#57606a;margin-top:4px">2026 — Accès sécurisé</div>
+    </div>
+    <div id="login-error" style="display:none;background:#ffebe9;border:1px solid #ff818266;border-radius:6px;padding:8px 12px;font-size:13px;color:#cf222e;margin-bottom:14px;text-align:center"></div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:12px;font-weight:600;color:#57606a;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Code d'accès</label>
+      <input id="login-input" type="password" placeholder="Entrer le code..."
+        style="width:100%;padding:9px 12px;border:1px solid #d0d7de;border-radius:6px;font-size:15px;letter-spacing:.15em;font-family:var(--font)"
+        onkeydown="if(event.key==='Enter')tryLogin()"/>
+    </div>
+    <button onclick="tryLogin()" style="width:100%;padding:10px;background:#2da44e;border:none;border-radius:6px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font)">
+      Se connecter
+    </button>
+    <div style="margin-top:14px;font-size:11px;color:#8c959f;text-align:center">Contactez l'administrateur si vous n'avez pas de code.</div>
+  </div>
+</div>
+
+<header class="bar">
+  <span class="bar-logo">⚕️</span>
+  <div><div class="bar-title">Planning Endoscopie 2026</div><div class="bar-sub">Juillet → Décembre 2026</div></div>
+  <div class="bar-right">
+    <span class="bar-role" id="bar-role"></span>
+    <button class="btn btn-d" id="btn-export" onclick="exportJSON()" style="display:none">⬇ Export JSON</button>
+    <button class="btn btn-d" onclick="logout()" title="Se déconnecter">🔓 Quitter</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="readonly-banner" id="readonly-banner"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" onclick="showTab('planning')"  id="tab-planning">📅 Planning</button>
+    <button class="tab"    onclick="showTab('saisie')"    id="tab-saisie">🚫 Indisponibilités</button>
+    <button class="tab"    onclick="showTab('medecins')"  id="tab-medecins" style="display:none">👨‍⚕️ Médecins</button>
+    <button class="tab"    onclick="showTab('equite')"    id="tab-equite">📊 Équité</button>
+    <button class="tab"    onclick="showTab('recap')"     id="tab-recap">📋 Récap indispos</button>
+    <button class="tab"    onclick="showTab('alertes')"   id="tab-alertes" style="display:none">⚠️ Alertes <span id="al-badge" style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:1px 6px;font-size:11px;margin-left:3px"></span></button>
+  </div>
+
+  <div class="view on" id="view-planning">
+    <div class="mnav">
+      <button class="mnav-btn" onclick="prevM()">←</button>
+      <div class="mnav-title" id="mnav-title"></div>
+      <button class="mnav-btn" onclick="nextM()">→</button>
+    </div>
+    <div class="month-pills" id="month-pills"></div>
+    <div class="mf">
+      <span class="mf-label">Filtrer :</span>
+      <div class="mchip on-all" id="mchip-all" onclick="setF('all')">Tous</div>
+      <div id="med-filter-chips"></div>
+    </div>
+    <div class="plan-wrap"><table class="plan" id="plan-table"></table></div>
+  </div>
+
+  <div class="view" id="view-saisie">
+    <div class="ind-saisie">
+      <div>
+        <div style="font-size:13px;color:var(--t2);margin-bottom:12px;padding:9px 13px;background:var(--yel-bg);border:1px solid #d4a72c;border-radius:var(--r)" id="saisie-hint"></div>
+        <div class="imc-wrap" id="imc-wrap"></div>
+        <div class="cal-months" id="cal-months"></div>
+      </div>
+      <div>
+        <div class="ind-form" id="ind-form-add">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--t2)">➕ Ajouter une période</div>
+          <div class="fld"><label>Médecin</label><select id="f-med"></select></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="fld"><label>Début</label><input type="date" id="f-deb"/></div>
+            <div class="fld"><label>Fin</label><input type="date" id="f-fin"/></div>
+          </div>
+          <div class="fld"><label>Motif</label>
+            <select id="f-motif"><option>Absent</option><option>Congé</option><option>Formation</option><option>Repos gardes</option><option>Maladie</option><option>Autre</option></select>
+          </div>
+          <button class="btn btn-g" style="width:100%;justify-content:center" onclick="addManuel()">Ajouter la période</button>
+        </div>
+        <div class="side-panel">
+          <div class="side-hdr">Indisponibilités saisies
+            <span id="ind-badge" style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:1px 7px;font-size:11px;font-weight:600"></span>
+          </div>
+          <div id="saisie-list" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-medecins">
+    <div class="med-cards" id="med-cards"></div>
+    <div class="add-med-form">
+      <div style="font-weight:600;font-size:14px;margin-bottom:14px">➕ Ajouter un médecin</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fld"><label>Initiales / Nom</label><input type="text" id="new-med-name" placeholder="ex: DM"/></div>
+        <div class="fld"><label>Couleur</label><input type="color" id="new-med-color" value="#6366f1"/></div>
+      </div>
+      <div class="fld"><label>Code d'accès médecin</label><input type="text" id="new-med-code" placeholder="ex: dm2026"/></div>
+      <div class="fld"><label>Mois dans l'équipe</label><div class="med-mois-grid" id="new-med-mois"></div></div>
+      <button class="btn btn-g" style="width:100%;justify-content:center;margin-top:4px" onclick="addMedecin()">Ajouter le médecin</button>
+    </div>
+  </div>
+
+  <div class="view" id="view-equite">
+    <div class="eq-warn" id="eq-warn" style="display:none">⚠️ <span id="eq-warn-txt"></span></div>
+    <div class="eq-wrap"><table class="eq-table" id="eq-table"></table></div>
+  </div>
+
+  <div class="view" id="view-recap"><div id="ind-list"></div></div>
+
+  <div class="view" id="view-alertes">
+    <div style="background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden">
+      <div style="padding:10px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-size:13px;font-weight:600">Créneaux non pourvus</div>
+      <div id="al-list"></div>
+    </div>
+  </div>
+</div>
+</div><!-- /app -->
+
+<!-- MODALS -->
+<div class="mbg" id="mbg">
+  <div class="modal">
+    <div class="mh"><div class="mh-title" id="m-title"></div><button class="mh-close" onclick="closeModal()">✕</button></div>
+    <div class="msub" id="m-sub"></div>
+    <div class="mopts" id="m-opts"></div>
+    <div class="mfoot"><button class="btn btn-d" onclick="closeModal()">Annuler</button><button class="btn btn-g" onclick="confirmModal()">Confirmer</button></div>
+  </div>
+</div>
+<div class="mbg" id="mbg2" style="z-index:501">
+  <div class="modal" style="width:340px">
+    <div class="mh"><div class="mh-title" id="m2-title"></div><button class="mh-close" onclick="closeM2()">✕</button></div>
+    <div class="msub" id="m2-sub"></div>
+    <div class="fld"><label>Motif</label>
+      <select id="m2-motif"><option>Absent</option><option>Congé</option><option>Formation</option><option>Repos gardes</option><option>Maladie</option><option>Autre</option></select>
+    </div>
+    <div class="mfoot"><button class="btn btn-d" onclick="closeM2()">Annuler</button><button class="btn btn-g" onclick="confirmInd()">Ajouter</button></div>
+  </div>
+</div>
+<div class="mbg" id="mbg3" style="z-index:502">
+  <div class="modal" style="width:320px">
+    <div class="mh"><div class="mh-title">Supprimer ?</div><button class="mh-close" onclick="closeM3()">✕</button></div>
+    <p style="font-size:13px;color:var(--t2);margin-bottom:16px" id="m3-txt"></p>
+    <div class="mfoot"><button class="btn btn-d" onclick="closeM3()">Annuler</button><button class="btn btn-r" onclick="confirmDelMed()">Supprimer</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// CODES D'ACCÈS — modifier ici pour changer les mots de passe
+// ══════════════════════════════════════════════════════════
+const ACCESS_CODES = {
+  admin:   "endo2026",       // Accès total
+  lecteur: "planning26",     // Lecture seule
+  medecins: {                // Code par médecin (indispos propres seulement)
+    "RW":  "rw2026",
+    "LUL": "lul2026",
+    "GR":  "gr2026",
+    "GA":  "ga2026",
+  }
+};
+
+let AUTH_ROLE=null, AUTH_MED=null;
+function isAdmin(){return AUTH_ROLE==="admin";}
+function canEdit(){return AUTH_ROLE==="admin";}
+function canSaisirIndispo(med){return AUTH_ROLE==="admin"||(AUTH_ROLE===`med:${med}`);}
+function canSaisirAny(){return AUTH_ROLE==="admin"||AUTH_ROLE?.startsWith("med:");}
+
+function checkCode(code){
+  const c=code.trim();
+  if(!c)return null;
+  if(c===ACCESS_CODES.admin) return{role:"admin"};
+  if(c===ACCESS_CODES.lecteur) return{role:"lecteur"};
+  for(const[med,mc] of Object.entries({...ACCESS_CODES.medecins,...EXTRA_MED_CODES})){
+    if(c===mc) return{role:`med:${med}`,med};
+  }
+  return null;
+}
+// Codes supplémentaires pour médecins ajoutés dynamiquement
+let EXTRA_MED_CODES={};
+
+// ══════════════════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════════════════
+function doLogin(){
+  const code=document.getElementById('login-code').value;
+  const res=checkCode(code);
+  if(!res){
+    document.getElementById('login-error').textContent='Code incorrect — réessayez.';
+    document.getElementById('login-code').value='';
+    document.getElementById('login-code').focus();
+    return;
+  }
+  AUTH_ROLE=res.role; AUTH_MED=res.med||null;
+  sessionStorage.setItem('auth_role',AUTH_ROLE);
+  if(AUTH_MED) sessionStorage.setItem('auth_med',AUTH_MED);
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  applyRoleUI();
+  loadData();
+}
+
+function logout(){
+  sessionStorage.clear();
+  AUTH_ROLE=null; AUTH_MED=null;
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-code').value='';
+  document.getElementById('login-error').textContent='';
+}
+
+// Reprendre session si déjà connecté
+(function resumeSession(){
+  const role=sessionStorage.getItem('auth_role');
+  const med=sessionStorage.getItem('auth_med');
+  if(role){
+    AUTH_ROLE=role; AUTH_MED=med||null;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+  }
+})();
+
+function applyRoleUI(){
+  const roleEl=document.getElementById('bar-role');
+  const banner=document.getElementById('readonly-banner');
+  if(isAdmin()){
+    roleEl.textContent='🔴 Admin'; roleEl.style='background:#dafbe1;color:#1a7f37;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600';
+    document.getElementById('btn-export').style.display='';
+    document.getElementById('tab-medecins').style.display='';
+    document.getElementById('tab-alertes').style.display='';
+    banner.classList.remove('on');
+  } else if(AUTH_ROLE?.startsWith('med:')){
+    roleEl.textContent=`🟡 Dr. ${AUTH_MED}`; roleEl.style='background:#fff8c5;color:#9a6700;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600';
+    banner.innerHTML=`ℹ️ Vous êtes connecté en tant que <strong>${AUTH_MED}</strong>. Vous pouvez uniquement saisir vos propres indisponibilités.`;
+    banner.classList.add('on');
+  } else {
+    roleEl.textContent='🔵 Lecteur'; roleEl.style='background:var(--blue-bg);color:var(--blue-dk);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600';
+    banner.innerHTML='🔵 Mode lecture seule — aucune modification possible.';
+    banner.classList.add('on');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// DONNÉES
+// ══════════════════════════════════════════════════════════
+const MN={7:"Juillet",8:"Août",9:"Septembre",10:"Octobre",11:"Novembre",12:"Décembre"};
+const SC={bloc_matin:"s-bm",bloc_apmidi:"s-bam",consult_L:"s-cL",consult_P:"s-cP",etage:"s-et"};
+const JHDR=["L","M","M","J","V","S","D"];
+const DEF_COLORS=["#0550ae","#bc4c00","#1b5e20","#cf222e","#7c3aed","#0891b2","#b45309","#be185d"];
+
+let DATA=null,OV={},IND={},MEDS=[],MAR_MOIS={};
+let curM=7,filt='all',activeMed=null;
+let mCtx=null,mSel=null,m2Ctx=null,m3Ctx=null;
+
+
+// ═══════════════════════════════════════════════════════════════
+// AUTHENTIFICATION
+// ═══════════════════════════════════════════════════════════════
+const CODES = {
+  "FsIcvQeaRx": "admin",
+  "dhjVkZqY":   "lecteur",
+  "iwZ9C5Gg":   "med:RW",
+  "2JlVlcZ0":   "med:LUL",
+  "Ts1tBRsJ":   "med:GR",
+  "4KsyFv17":   "med:GA",
+};
+
+let USER_ROLE = null;  // "admin" | "lecteur" | "med:XX"
+let USER_MED  = null;  // pour role med:XX → "XX"
+
+function tryLogin() {
+  const code = document.getElementById('login-input').value.trim();
+  const role = CODES[code];
+  if (!role) {
+    const err = document.getElementById('login-error');
+    err.textContent = 'Code incorrect. Réessayez.';
+    err.style.display = 'block';
+    document.getElementById('login-input').value = '';
+    document.getElementById('login-input').focus();
+    return;
+  }
+  USER_ROLE = role;
+  USER_MED  = role.startsWith('med:') ? role.split(':')[1] : null;
+  sessionStorage.setItem('plan_role_2026', USER_ROLE);
+  document.getElementById('login-screen').style.display = 'none';
+  applyRoleUI();
+  loadData();
+}
+
+function applyRoleUI() {
+  const isAdmin   = USER_ROLE === 'admin';
+  const isMed     = USER_ROLE.startsWith('med:');
+  const isLecteur = USER_ROLE === 'lecteur';
+
+  // Label rôle dans le header
+  const roleLabel = isAdmin ? '🔑 Admin' : isMed ? `👤 ${USER_MED}` : '👁 Lecteur';
+  const roleColor = isAdmin ? '#2da44e' : isMed ? '#0969da' : '#57606a';
+  document.getElementById('role-badge').textContent = roleLabel;
+  document.getElementById('role-badge').style.color = roleColor;
+
+  // Onglet médecins : admin seulement
+  if (!isAdmin) document.getElementById('tab-medecins').style.display = 'none';
+
+  // Export JSON : admin seulement
+  if (!isAdmin) document.getElementById('btn-export').style.display = 'none';
+
+  // Pour un médecin : pré-sélectionner son propre médecin dans les indispos
+  if (isMed) {
+    setTimeout(() => {
+      setIM(USER_MED);
+      // Pré-remplir le select du formulaire manuel
+      const sel = document.getElementById('f-med');
+      if (sel) sel.value = USER_MED;
+    }, 300);
+  }
+}
+
+function canEdit() { return USER_ROLE === 'admin'; }
+function canEditIndispo(med) {
+  if (USER_ROLE === 'admin') return true;
+  if (USER_ROLE.startsWith('med:')) return USER_MED === med;
+  return false;
+}
+function canView() { return USER_ROLE !== null; }
+
+// Vérifier session existante au chargement de la page
+window.addEventListener('DOMContentLoaded', function() {
+  const saved = sessionStorage.getItem('plan_role_2026');
+  const validRole = Object.values(CODES).includes(saved);
+  if (saved && validRole) {
+    USER_ROLE = saved;
+    USER_MED  = saved.startsWith('med:') ? saved.split(':')[1] : null;
+    document.getElementById('login-screen').style.display = 'none';
+    applyRoleUI();
+    loadData();
+  } else {
+    setTimeout(() => {
+      const inp = document.getElementById('login-input');
+      if (inp) inp.focus();
+    }, 100);
+  }
+});
+
+async function loadData(){
+  try{
+    const r=await fetch('planning_data.json?_='+Date.now());
+    DATA=await r.json();
+    MEDS=DATA.medecins.map((id,i)=>({id,color:DATA.medecins_colors?.[id]||DEF_COLORS[i%DEF_COLORS.length]}));
+    MAR_MOIS=DATA.mar_mois||{};
+    const ov=localStorage.getItem('plan_ov_2026'); if(ov)OV=JSON.parse(ov);
+    const ind=localStorage.getItem('plan_ind_2026'); if(ind)IND=JSON.parse(ind);
+    const mds=localStorage.getItem('plan_meds_2026');
+    if(mds){const s=JSON.parse(mds);MEDS=[...MEDS.filter(m=>!s.find(x=>x.id===m.id)),...s];}
+    const mm=localStorage.getItem('plan_marmois_2026'); if(mm)MAR_MOIS=JSON.parse(mm);
+    const ec=localStorage.getItem('plan_medcodes_2026'); if(ec)EXTRA_MED_CODES=JSON.parse(ec);
+    const t=new Date().toISOString().slice(0,10);
+    document.getElementById('f-deb').value=t; document.getElementById('f-fin').value=t;
+    buildMoisCB(); render();
+  }catch(e){document.querySelector('.wrap').innerHTML='<p style="padding:40px;color:red">Erreur chargement : '+e.message+'</p>';}
+}
+
+function mc(id){return MEDS.find(m=>m.id===id)||{id,color:'#888'};}
+function mcColor(id){return mc(id).color;}
+function hex2rgb(h){return`${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)}`;}
+function light(h){return`rgba(${hex2rgb(h)},0.15)`;}
+function saveOV(){localStorage.setItem('plan_ov_2026',JSON.stringify(OV));}
+function saveIND(){localStorage.setItem('plan_ind_2026',JSON.stringify(IND));}
+function saveMEDS(){localStorage.setItem('plan_meds_2026',JSON.stringify(MEDS));}
+function saveMAR(){localStorage.setItem('plan_marmois_2026',JSON.stringify(MAR_MOIS));}
+function saveCODES(){localStorage.setItem('plan_medcodes_2026',JSON.stringify(EXTRA_MED_CODES));}
+
+function getMeds(day,slot){
+  const b=new Set(slot.meds);
+  Object.entries(OV).forEach(([k,v])=>{const[d,si,m]=k.split('|');if(d===day.date&&si===slot.id){v?b.add(m):b.delete(m);}});
+  return[...b];
+}
+function isOv(d,s,m){return`${d}|${s}|${m}`in OV;}
+function isInd(med,date){
+  const day=DATA.planning.find(d=>d.date===date);
+  if(day&&day.indispos[med])return true;
+  return(IND[date]||[]).some(i=>i.med===med);
+}
+function getIndMeds(iso){
+  const s=new Set();
+  const day=DATA?DATA.planning.find(d=>d.date===iso):null;
+  if(day)MEDS.forEach(m=>{if(day.indispos[m.id])s.add(m.id);});
+  (IND[iso]||[]).forEach(i=>s.add(i.med));
+  return s;
+}
+function monthMeds(mo){return(MAR_MOIS[String(mo)]||MAR_MOIS[mo]||MEDS.map(m=>m.id));}
+
+// ══════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════
+function render(){
+  renderStats();renderMonthPills();renderMedChips();
+  renderPlanning();renderEquity();renderRecap();renderAlerts();
+  renderCals();renderSaisieList();renderMedCards();renderImcWrap();
+  updateSelects();updateSaisieUI();
+}
+
+function renderStats(){
+  if(!DATA)return;
+  let total=0,manques=0;
+  const mods=Object.keys(OV).length,indT=Object.values(IND).reduce((a,v)=>a+v.length,0);
+  DATA.planning.forEach(day=>day.slots.forEach(s=>{getMeds(day,s).forEach(()=>total++);if(s.manque&&!getMeds(day,s).length)manques++;}));
+  document.getElementById('stats').innerHTML=[
+    {l:"Jours ouvrés",v:DATA.planning.length,s:"juil → déc"},
+    {l:"Créneaux assignés",v:total,s:"total"},
+    {l:"Non pourvus",v:manques,s:"manque MAR"},
+    {l:"Médecins",v:MEDS.length,s:"actifs"},
+    {l:"Modifs",v:mods,s:"vs auto"},
+    {l:"Indispos saisies",v:indT,s:""},
+  ].map(s=>`<div class="stat"><div class="stat-l">${s.l}</div><div class="stat-v">${s.v}</div><div class="stat-s">${s.s}</div></div>`).join('');
+}
+
+function renderMonthPills(){
+  document.getElementById('month-pills').innerHTML=[7,8,9,10,11,12].map(m=>
+    `<div class="mpill ${curM===m?'on':''}" onclick="goMonth(${m})">${MN[m]}</div>`).join('');
+}
+function goMonth(m){curM=m;renderMonthPills();renderPlanning();}
+function prevM(){if(curM>7){curM--;renderMonthPills();renderPlanning();}}
+function nextM(){if(curM<12){curM++;renderMonthPills();renderPlanning();}}
+
+function renderMedChips(){
+  document.getElementById('med-filter-chips').innerHTML=MEDS.map(m=>
+    `<div class="mchip" id="mchip-${m.id}" onclick="setF('${m.id}')"
+      style="${filt===m.id?`background:${light(m.color)};border-color:${m.color};color:${m.color}`:''}">${m.id}</div>`
+  ).join('');
+}
+function setF(f){
+  filt=f;
+  document.getElementById('mchip-all').className='mchip'+(filt==='all'?' on-all':'');
+  MEDS.forEach(m=>{const c=document.getElementById('mchip-'+m.id);if(c)c.style=filt===m.id?`background:${light(m.color)};border-color:${m.color};color:${m.color}`:''});
+  renderPlanning();
+}
+
+function renderPlanning(){
+  if(!DATA)return;
+  const days=DATA.planning.filter(d=>d.mois===curM);
+  document.getElementById('mnav-title').textContent=(MN[curM]||'')+' 2026';
+  const meds=filt==='all'?monthMeds(curM):[filt];
+  let html=`<thead><tr><th>Date</th><th>Jour</th><th>Créneau</th>${meds.map(m=>`<th style="color:${mcColor(m)}">${m}</th>`).join('')}</tr></thead><tbody>`;
+  days.forEach((day,di)=>{
+    const nb=day.slots.length;
+    day.slots.forEach((slot,si)=>{
+      const ms=getMeds(day,slot),cls=SC[slot.type]||'';
+      html+=`<tr class="${si===0&&di>0?'sep':''}">`;
+      if(si===0){html+=`<td class="td-date" rowspan="${nb}">${day.label}</td><td class="td-jour" rowspan="${nb}">${day.jour}</td>`;}
+      html+=`<td class="td-cren ${cls}">${slot.label}</td>`;
+      meds.forEach(med=>{
+        const ind=isInd(med,day.date),assigned=ms.includes(med),ov=isOv(day.date,slot.id,med);
+        const vide=slot.manque&&ms.length===0&&!assigned;
+        const col=mcColor(med);
+        const clickable=canEdit()?' clickable':'';
+        const oc=canEdit()?`onclick="openModal('${day.date}','${slot.id}','${med}','${slot.label}','${day.label}','${day.jour}')"`:'' ;
+        if(ind){html+=`<td class="mc mc-ind"><span class="mc-ind-txt">Indispo</span></td>`;}
+        else if(vide){html+=`<td class="mc mc-vide${clickable}" ${oc}><span class="mc-vide-txt">—</span></td>`;}
+        else{
+          html+=`<td class="mc${clickable}" style="${assigned?`background:${light(col)};`:''}" ${oc}>`;
+          if(assigned)html+=`<span class="mc-check" style="color:${col}">✓</span>`;
+          if(ov)html+=`<span class="mc-mod">✎</span>`;
+          html+=`</td>`;
+        }
+      });
+      html+=`</tr>`;
+    });
+  });
+  html+='</tbody>';
+  document.getElementById('plan-table').innerHTML=html;
+}
+
+// MODAL PLANNING (admin seulement)
+function openModal(date,sid,med,sL,dL,jour){
+  if(!canEdit()){toast('Accès lecteur — modification non autorisée');return;}
+  if(!canEdit())return;
+  const day=DATA.planning.find(d=>d.date===date);
+  const slot=day.slots.find(s=>s.id===sid);
+  const ms=getMeds(day,slot),assigned=ms.includes(med);
+  mCtx={date,sid,med,assigned};mSel=assigned?'rm':'add';
+  document.getElementById('m-title').textContent=`${med} — ${sL}`;
+  document.getElementById('m-sub').textContent=`${jour} ${dL}`;
+  const others=monthMeds(day.mois).filter(m=>m!==med&&!isInd(m,date));
+  let opts='';
+  if(!assigned)opts+=`<div class="mopt sel" onclick="selOpt('add',this)">✓ Assigner ${med}</div>`;
+  else{opts+=`<div class="mopt rm sel" onclick="selOpt('rm',this)">✕ Retirer ${med}</div>`;opts+=`<div class="mopt" onclick="selOpt('keep',this)">↩ Garder</div>`;}
+  others.forEach(m=>{const oi=ms.includes(m);opts+=`<div class="mopt ${oi?'rm':''}" style="color:${mcColor(m)}" onclick="selOpt('sw_${m}',this)">${oi?`↔ ${med}→${m}`:`+ Ajouter ${m}`}</div>`;});
+  document.getElementById('m-opts').innerHTML=opts;
+  document.getElementById('mbg').classList.add('on');
+}
+function selOpt(v,el){mSel=v;document.querySelectorAll('#mbg .mopt').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');}
+function confirmModal(){
+  if(!mCtx||!mSel||mSel==='keep'){closeModal();return;}
+  const{date,sid,med}=mCtx;
+  const day=DATA.planning.find(d=>d.date===date);
+  const slot=day.slots.find(s=>s.id===sid);
+  const ms=getMeds(day,slot);
+  if(mSel==='add')OV[`${date}|${sid}|${med}`]=true;
+  else if(mSel==='rm')OV[`${date}|${sid}|${med}`]=false;
+  else if(mSel.startsWith('sw_')){const o=mSel.replace('sw_','');if(ms.includes(o)){OV[`${date}|${sid}|${med}`]=true;OV[`${date}|${sid}|${o}`]=false;}else OV[`${date}|${sid}|${o}`]=true;}
+  saveOV();closeModal();render();toast('Modification enregistrée ✓');
+}
+function closeModal(){document.getElementById('mbg').classList.remove('on');mCtx=null;mSel=null;}
+document.getElementById('mbg').addEventListener('click',e=>{if(e.target===document.getElementById('mbg'))closeModal();});
+
+// ══════════════════════════════════════════════════════════
+// MÉDECINS (admin seulement)
+// ══════════════════════════════════════════════════════════
+function renderMedCards(){
+  if(!isAdmin()){document.getElementById('med-cards').innerHTML='';return;}
+  document.getElementById('med-cards').innerHTML=MEDS.map(m=>{
+    const mois=Object.entries(MAR_MOIS).filter(([,v])=>(v||[]).includes(m.id)).map(([k])=>MN[k]||k).join(', ')||'Aucun mois';
+    const hasCode=ACCESS_CODES.medecins[m.id]||EXTRA_MED_CODES[m.id];
+    return`<div class="med-card">
+      <div class="med-avatar" style="background:${m.color}">${m.id.slice(0,2)}</div>
+      <div class="med-info">
+        <div class="med-name" style="color:${m.color}">${m.id}</div>
+        <div class="med-sub">${mois}</div>
+        <div style="font-size:10px;color:var(--t3);margin-top:2px">${hasCode?'🔑 Code défini':'⚠️ Pas de code'}</div>
+      </div>
+      <div class="med-actions">
+        <button class="btn btn-d" style="padding:3px 8px;font-size:11px" onclick="editMedColor('${m.id}')">🎨</button>
+        <button class="btn btn-r" style="padding:3px 8px;font-size:11px" onclick="askDelMed('${m.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildMoisCB(){
+  document.getElementById('new-med-mois').innerHTML=[7,8,9,10,11,12].map(m=>
+    `<label class="med-mois-item"><input type="checkbox" value="${m}" id="nm-mo-${m}"> ${MN[m]}</label>`).join('');
+}
+
+function addMedecin(){
+  if(!canEdit()){toast('Accès admin requis');return;}
+  if(!isAdmin()){toast('Accès refusé');return;}
+  const name=document.getElementById('new-med-name').value.trim().toUpperCase();
+  const color=document.getElementById('new-med-color').value;
+  const code=document.getElementById('new-med-code').value.trim();
+  if(!name){toast('Entrez un nom');return;}
+  if(MEDS.find(m=>m.id===name)){toast('Ce médecin existe déjà');return;}
+  const selectedMois=[7,8,9,10,11,12].filter(m=>document.getElementById('nm-mo-'+m)?.checked);
+  MEDS.push({id:name,color});
+  selectedMois.forEach(mo=>{const k=String(mo);if(!MAR_MOIS[k])MAR_MOIS[k]=[];if(!MAR_MOIS[k].includes(name))MAR_MOIS[k].push(name);});
+  DATA.planning.forEach(day=>{if(day.indispos[name]===undefined)day.indispos[name]=false;});
+  if(code) EXTRA_MED_CODES[name]=code;
+  saveMEDS();saveMAR();saveCODES();
+  document.getElementById('new-med-name').value='';
+  document.getElementById('new-med-code').value='';
+  [7,8,9,10,11,12].forEach(m=>{const el=document.getElementById('nm-mo-'+m);if(el)el.checked=false;});
+  render();toast(`${name} ajouté ✓`);
+}
+
+function editMedColor(id){
+  if(!isAdmin())return;
+  const input=document.createElement('input');input.type='color';
+  const med=MEDS.find(m=>m.id===id);input.value=med?med.color:'#888';
+  input.onchange=()=>{if(med)med.color=input.value;saveMEDS();render();toast(`Couleur de ${id} mise à jour`);};
+  input.click();
+}
+
+function askDelMed(id){
+  if(!isAdmin())return;
+  m3Ctx=id;
+  document.getElementById('m3-txt').textContent=`Supprimer ${id} ? Toutes ses affectations seront retirées.`;
+  document.getElementById('mbg3').classList.add('on');
+}
+function confirmDelMed(){
+  if(!m3Ctx)return;const id=m3Ctx;
+  MEDS=MEDS.filter(m=>m.id!==id);
+  Object.keys(MAR_MOIS).forEach(k=>{MAR_MOIS[k]=(MAR_MOIS[k]||[]).filter(m=>m!==id);});
+  Object.keys(OV).filter(k=>k.includes('|'+id)).forEach(k=>delete OV[k]);
+  Object.keys(IND).forEach(k=>{IND[k]=(IND[k]||[]).filter(i=>i.med!==id);if(!IND[k].length)delete IND[k];});
+  delete EXTRA_MED_CODES[id];
+  saveMEDS();saveMAR();saveOV();saveIND();saveCODES();closeM3();render();toast(`${id} supprimé`);
+}
+function closeM3(){document.getElementById('mbg3').classList.remove('on');m3Ctx=null;}
+document.getElementById('mbg3').addEventListener('click',e=>{if(e.target===document.getElementById('mbg3'))closeM3();});
+
+// ══════════════════════════════════════════════════════════
+// SAISIE INDISPOS — UI selon rôle
+// ══════════════════════════════════════════════════════════
+function updateSaisieUI(){
+  const hint=document.getElementById('saisie-hint');
+  const formAdd=document.getElementById('ind-form-add');
+  if(!canSaisirAny()){
+    hint.textContent='🔵 Mode lecture seule — vous ne pouvez pas modifier les indisponibilités.';
+    formAdd.style.display='none';
+    document.getElementById('imc-wrap').style.display='none';
+  } else if(AUTH_ROLE?.startsWith('med:')){
+    hint.innerHTML=`<strong>1.</strong> Vous ne pouvez saisir que vos propres indisponibilités (<strong style="color:${mcColor(AUTH_MED)}">${AUTH_MED}</strong>)`;
+    formAdd.style.display='';
+    document.getElementById('imc-wrap').style.display='none';
+    // Forcer le select sur ce médecin
+    const sel=document.getElementById('f-med');if(sel){sel.value=AUTH_MED;sel.disabled=true;}
+    // Pré-sélectionner le médecin dans le calendrier
+    if(activeMed!==AUTH_MED){activeMed=AUTH_MED;renderImcWrap();renderCals();}
+  } else {
+    hint.innerHTML='<strong>1.</strong> Sélectionner un médecin &nbsp;→&nbsp; <strong>2.</strong> Cliquer les jours (clic = toggle)';
+    formAdd.style.display='';
+    document.getElementById('imc-wrap').style.display='';
+    const sel=document.getElementById('f-med');if(sel)sel.disabled=false;
+  }
+}
+
+function renderImcWrap(){
+  const medsToShow=AUTH_ROLE?.startsWith('med:')?MEDS.filter(m=>m.id===AUTH_MED):MEDS;
+  document.getElementById('imc-wrap').innerHTML=medsToShow.map(m=>{
+    const on=activeMed===m.id;
+    return`<div class="imc ${canSaisirAny()?'':'opacity:.5 pointer-events:none'}" id="imc-${m.id}" onclick="setIM('${m.id}')"
+      style="${on?`background:${light(m.color)};border-color:${m.color};color:${m.color}`:''}">${m.id}</div>`;
+  }).join('');
+}
+function setIM(med){
+  if(!canSaisirIndispo(med)){toast(`Vous ne pouvez pas modifier les indispos de ${med}`);return;}
+  activeMed=activeMed===med?null:med;
+  renderImcWrap();renderCals();
+}
+
+function dIM(y,m){return new Date(y,m,0).getDate();}
+function fDOW(y,m){const d=new Date(y,m-1,1).getDay();return d===0?6:d-1;}
+function isWE(y,m,d){const dw=new Date(y,m-1,d).getDay();return dw===0||dw===6;}
+function isoD(y,m,d){return`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+
+function renderCals(){
+  if(!DATA)return;
+  const today=new Date().toISOString().slice(0,10);
+  let html='';
+  [7,8,9,10,11,12].forEach(mo=>{
+    const y=2026,nd=dIM(y,mo),fd=fDOW(y,mo);
+    let cnt=0;for(let d=1;d<=nd;d++)cnt+=getIndMeds(isoD(y,mo,d)).size;
+    html+=`<div class="cal-block"><div class="cal-block-hdr">${MN[mo]} 2026<span class="cal-mo-cnt">${cnt} indispo${cnt!==1?'s':''}</span></div><div class="cal-grid">`;
+    JHDR.forEach((j,i)=>html+=`<div class="cal-hdr ${i>=5?'we':''}">${j}</div>`);
+    for(let i=0;i<fd;i++)html+=`<div class="cal-day empty"></div>`;
+    for(let d=1;d<=nd;d++){
+      const is=isoD(y,mo,d),we=isWE(y,mo,d),meds=[...getIndMeds(is)],isT=is===today;
+      let cls='cal-day';const canClick=!we&&canSaisirAny();
+      if(we)cls+=' we-day';
+      else if(meds.length===1)cls+=` i-one`;
+      else if(meds.length>1)cls+=' i-multi';
+      if(isT)cls+=' today-r';
+      if(canClick)cls+=' clickable';
+      const oc=canClick?`onclick="calClick('${is}')"`:'' ;
+      let style='';
+      if(!we&&meds.length===1){const col=mcColor(meds[0]);style=`style="background:${light(col)};color:${col}"`;}
+      html+=`<div class="${cls}" ${oc} ${style} title="${meds.join(', ')}">${d}${meds.length?'<span class="cal-dot"></span>':''}</div>`;
+    }
+    html+=`</div></div>`;
+  });
+  document.getElementById('cal-months').innerHTML=html;
+}
+
+function calClick(is){
+  if(!canEditIndispo(activeMed)){toast('Vous ne pouvez saisir que vos propres indisponibilités');return;}
+  if(!canSaisirAny()){toast('Accès lecture seule');return;}
+  if(!activeMed){toast('Sélectionner un médecin d\'abord');return;}
+  if(!canSaisirIndispo(activeMed)){toast(`Vous ne pouvez pas modifier les indispos de ${activeMed}`);return;}
+  const fromData=DATA.planning.find(d=>d.date===is);
+  if(fromData&&fromData.indispos[activeMed]){toast(`${activeMed} déjà indisponible (source planning)`);return;}
+  const list=IND[is]||[];const ex=list.find(i=>i.med===activeMed);
+  if(ex){
+    IND[is]=list.filter(i=>i.med!==activeMed);if(!IND[is].length)delete IND[is];
+    saveIND();render();toast(`${activeMed} — indispo retirée`);
+  }else{
+    m2Ctx={is,med:activeMed};
+    document.getElementById('m2-title').textContent=`${activeMed} — Indisponibilité`;
+    const dt=new Date(is+'T12:00:00');
+    document.getElementById('m2-sub').textContent=dt.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    document.getElementById('mbg2').classList.add('on');
+  }
+}
+function confirmInd(){
+  if(!m2Ctx)return;const{is,med}=m2Ctx;const motif=document.getElementById('m2-motif').value;
+  if(!IND[is])IND[is]=[];
+  if(!IND[is].find(i=>i.med===med))IND[is].push({med,motif});
+  saveIND();closeM2();render();toast(`${med} — ajouté (${motif})`);
+}
+function closeM2(){document.getElementById('mbg2').classList.remove('on');m2Ctx=null;}
+document.getElementById('mbg2').addEventListener('click',e=>{if(e.target===document.getElementById('mbg2'))closeM2();});
+
+function addManuel(){
+  const fMed=document.getElementById('f-med').value;
+  if(!canEditIndispo(fMed)){toast('Vous ne pouvez saisir que vos propres indisponibilités');return;}
+  if(!canSaisirAny()){toast('Accès refusé');return;}
+  const med=document.getElementById('f-med').value;
+  if(!canSaisirIndispo(med)){toast(`Vous ne pouvez pas modifier les indispos de ${med}`);return;}
+  const deb=document.getElementById('f-deb').value,fin=document.getElementById('f-fin').value;
+  const motif=document.getElementById('f-motif').value;
+  if(!deb||!fin||deb>fin){toast('Dates invalides');return;}
+  let added=0,cur=new Date(deb+'T12:00:00'),end=new Date(fin+'T12:00:00');
+  while(cur<=end){
+    const is=cur.toISOString().slice(0,10);
+    if(!IND[is])IND[is]=[];
+    if(!IND[is].find(i=>i.med===med)){IND[is].push({med,motif});added++;}
+    cur.setDate(cur.getDate()+1);
+  }
+  saveIND();render();toast(`${added} jour${added>1?'s':''} ajouté${added>1?'s':''} pour ${med}`);
+}
+
+function renderSaisieList(){
+  const all=[];
+  // Selon rôle : médecin ne voit que ses propres indispos
+  Object.entries(IND).forEach(([date,list])=>{
+    list.forEach(i=>{
+      if(AUTH_ROLE?.startsWith('med:')&&i.med!==AUTH_MED)return;
+      all.push({date,...i});
+    });
+  });
+  all.sort((a,b)=>a.date.localeCompare(b.date));
+  document.getElementById('ind-badge').textContent=all.length+(all.length!==1?' entrées':' entrée');
+  document.getElementById('saisie-list').innerHTML=all.length
+    ?all.map(e=>{
+      const d=new Date(e.date+'T12:00:00');
+      const lbl=d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+      const col=mcColor(e.med);
+      const canDel=canSaisirIndispo(e.med);
+      return`<div class="sr"><span style="font-weight:700;min-width:38px;color:${col}">${e.med}</span><span style="flex:1;color:var(--t2);font-size:11px">${lbl}</span><span style="font-size:11px;color:var(--t3);font-style:italic">${e.motif}</span>${canDel?`<button class="sr-del" onclick="delInd('${e.date}','${e.med}')">✕</button>`:''}</div>`;
+    }).join('')
+    :'<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucune indisponibilité saisie.</div>';
+}
+function delInd(iso,med){
+  if(!canEditIndispo(med)){toast('Vous ne pouvez modifier que vos propres indisponibilités');return;}
+  if(!canSaisirIndispo(med)){toast('Accès refusé');return;}
+  if(IND[iso]){IND[iso]=IND[iso].filter(i=>i.med!==med);if(!IND[iso].length)delete IND[iso];}
+  saveIND();render();toast(`${med} — supprimé`);
+}
+
+function updateSelects(){
+  const sel=document.getElementById('f-med');if(!sel)return;
+  const medsAvail=AUTH_ROLE?.startsWith('med:')?MEDS.filter(m=>m.id===AUTH_MED):MEDS;
+  const val=sel.value;
+  sel.innerHTML=medsAvail.map(m=>`<option value="${m.id}">${m.id}</option>`).join('');
+  if(medsAvail.find(m=>m.id===val))sel.value=val;
+  if(AUTH_ROLE?.startsWith('med:')){sel.value=AUTH_MED;sel.disabled=true;}
+  else sel.disabled=false;
+}
+
+// ══════════════════════════════════════════════════════════
+// RÉCAP INDISPOS
+// ══════════════════════════════════════════════════════════
+function renderRecap(){
+  if(!DATA)return;
+  const medsToShow=AUTH_ROLE?.startsWith('med:')?MEDS.filter(m=>m.id===AUTH_MED):MEDS;
+  let html='';
+  medsToShow.forEach(m=>{
+    const fD=DATA.planning.filter(d=>d.indispos[m.id]).map(d=>d.date);
+    const fS=Object.entries(IND).filter(([,l])=>l.some(i=>i.med===m.id)).map(([d])=>d);
+    const all=[...new Set([...fD,...fS])].sort();
+    if(!all.length)return;
+    const bm={7:[],8:[],9:[],10:[],11:[],12:[]};
+    all.forEach(iso=>{const mo=parseInt(iso.split('-')[1]);if(bm[mo])bm[mo].push({iso,saisi:fS.includes(iso)&&!fD.includes(iso)});});
+    html+=`<div class="ind-card"><div style="font-size:14px;font-weight:600;margin-bottom:8px;color:${m.color}">${m.id} — ${all.length} jour${all.length>1?'s':''}</div>`;
+    [7,8,9,10,11,12].forEach(mo=>{
+      if(!bm[mo]||!bm[mo].length)return;
+      html+=`<div style="margin-bottom:7px"><strong style="font-size:12px;color:var(--t2)">${MN[mo]} (${bm[mo].length})</strong><div class="ind-chips" style="margin-top:4px">`;
+      bm[mo].forEach(({iso,saisi})=>{
+        const d=new Date(iso+'T12:00:00');const lbl=d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+        html+=`<span class="ind-chip" style="background:${light(m.color)};color:${m.color};${saisi?`border:1px solid ${m.color}`:''}" title="${saisi?'Saisi':'Excel'}">${lbl}</span>`;
+      });
+      html+=`</div></div>`;
+    });
+    html+=`</div>`;
+  });
+  document.getElementById('ind-list').innerHTML=html||'<p style="padding:20px;color:var(--t2)">Aucune indisponibilité.</p>';
+}
+
+// ══════════════════════════════════════════════════════════
+// ÉQUITÉ
+// ══════════════════════════════════════════════════════════
+function renderEquity(){
+  if(!DATA)return;
+  const mo=[7,8,9,10,11,12],cnt={};
+  MEDS.forEach(m=>{cnt[m.id]={};mo.forEach(x=>cnt[m.id][x]={bm:0,bam:0,cL:0,cP:0,et:0});});
+  DATA.planning.forEach(day=>day.slots.forEach(slot=>{
+    getMeds(day,slot).forEach(mid=>{
+      if(!cnt[mid]||!cnt[mid][day.mois])return;
+      const t=slot.type;
+      if(t==='bloc_matin')cnt[mid][day.mois].bm++;
+      else if(t==='bloc_apmidi')cnt[mid][day.mois].bam++;
+      else if(t==='consult_L')cnt[mid][day.mois].cL++;
+      else if(t==='consult_P')cnt[mid][day.mois].cP++;
+      else if(t==='etage')cnt[mid][day.mois].et++;
+    });
+  }));
+  const totCL=MEDS.map(m=>mo.reduce((a,x)=>a+(cnt[m.id]?cnt[m.id][x].cL:0),0));
+  const maxCL=Math.max(1,...totCL);
+  let html=`<thead><tr><th>Médecin</th>${mo.map(x=>`<th colspan="2"><span style="font-size:11px">${MN[x]}</span><br><small style="font-weight:400;color:var(--t3)">Lib · Pub</small></th>`).join('')}<th>∑ Lib.</th><th>∑ Pub.</th></tr></thead><tbody>`;
+  MEDS.forEach((m,i)=>{
+    const tL=mo.reduce((a,x)=>a+(cnt[m.id]?cnt[m.id][x].cL:0),0);
+    const tP=mo.reduce((a,x)=>a+(cnt[m.id]?cnt[m.id][x].cP:0),0);
+    html+=`<tr><td style="color:${m.color};font-weight:700">${m.id}</td>`;
+    mo.forEach(x=>{const v=cnt[m.id]?cnt[m.id][x].cL:0,vp=cnt[m.id]?cnt[m.id][x].cP:0;
+      html+=`<td>${v}<div class="eq-bar" style="background:${m.color};width:${Math.max(v*14,3)}px"></div></td><td>${vp}</td>`;});
+    html+=`<td><strong>${tL}</strong></td><td>${tP}</td></tr>`;
+  });
+  html+='</tbody>';document.getElementById('eq-table').innerHTML=html;
+  const maxT=Math.max(...totCL),minT=Math.min(...totCL.filter(v=>v>0).concat([0])),diff=maxT-minT;
+  const w=document.getElementById('eq-warn');
+  if(diff>1&&maxT>0){w.style.display='flex';document.getElementById('eq-warn-txt').textContent=`Écart de ${diff} consultations libérales : ${MEDS[totCL.indexOf(maxT)]?.id} (${maxT}) vs ${MEDS[totCL.indexOf(minT)]?.id} (${minT}).`;}
+  else w.style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════
+// ALERTES (admin seulement)
+// ══════════════════════════════════════════════════════════
+function renderAlerts(){
+  if(!DATA)return;
+  const als=[];
+  DATA.planning.forEach(day=>day.slots.forEach(slot=>{
+    const ms=getMeds(day,slot);
+    if(slot.manque&&ms.length===0)als.push({date:day.label,jour:day.jour,cren:slot.label});
+    else if(slot.manque&&ms.length<(slot.type==='bloc_matin'?3:1))als.push({date:day.label,jour:day.jour,cren:`${slot.label} (${ms.length} MAR)`});
+  }));
+  document.getElementById('al-badge').textContent=als.length;
+  document.getElementById('al-list').innerHTML=als.length
+    ?als.map(a=>`<div class="al-row"><strong style="min-width:100px">${a.date}</strong><span style="font-size:11px;color:var(--t3);min-width:70px">${a.jour}</span><span style="flex:1">${a.cren}</span><span class="al-pill">Non pourvu</span></div>`).join('')
+    :'<div style="padding:20px;text-align:center;color:var(--t2);font-size:13px">✅ Tous les créneaux sont pourvus.</div>';
+}
+
+// ══════════════════════════════════════════════════════════
+// TABS & EXPORT
+// ══════════════════════════════════════════════════════════
+function showTab(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('view-'+id).classList.add('on');
+  document.getElementById('tab-'+id).classList.add('on');
+}
+
+function exportJSON(){
+  if(!isAdmin()){toast('Accès refusé');return;}
+  const f=JSON.parse(JSON.stringify(DATA));
+  f.planning.forEach(day=>day.slots.forEach(s=>{s.meds=getMeds(day,s);}));
+  f.medecins=MEDS.map(m=>m.id);
+  f.medecins_colors=Object.fromEntries(MEDS.map(m=>[m.id,m.color]));
+  f.mar_mois=MAR_MOIS;f.overrides=OV;f.indispos_saisies=IND;
+  f.exportedAt=new Date().toISOString();
+  const b=new Blob([JSON.stringify(f,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='planning_data.json';a.click();
+  toast('planning_data.json téléchargé ✓ — uploader sur GitHub');
+}
+
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('on');setTimeout(()=>el.classList.remove('on'),2800);}
+
+// Auto-login si session
+if(AUTH_ROLE) applyRoleUI();
+</script>
+</body>
+</html>
