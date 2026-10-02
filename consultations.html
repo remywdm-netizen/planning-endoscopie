@@ -50,8 +50,24 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .chip.autre{background:#eaeef2;color:var(--t2);font-weight:600}
 .cell-d{display:block;font-size:10px;color:var(--t3);margin-top:2px}
 .ferie{background:#f0f0f0;color:var(--t3);font-size:11px;font-style:italic}
-.ov{position:relative}
-.ov::after{content:"✎";position:absolute;top:1px;right:3px;font-size:9px;color:#bc4c00}
+.cellbtn{cursor:pointer;position:relative}
+.cellbtn:hover{background:var(--blue-bg)}
+.cellbtn.forced{background:#fff8e6;box-shadow:inset 0 0 0 2px #d4a72c}
+.cellbtn.forced::after{content:"📌";position:absolute;top:1px;right:2px;font-size:9px}
+.modal-bg{position:fixed;inset:0;background:rgba(27,31,36,.45);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
+.modal-bg.on{display:flex}
+.modal{background:var(--surf);border-radius:10px;width:380px;max-width:100%;max-height:90vh;overflow:auto;box-shadow:0 8px 40px rgba(0,0,0,.3)}
+.modal-h{padding:12px 16px;border-bottom:1px solid var(--bd);font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.modal-h small{display:block;font-weight:400;color:var(--t2);font-size:12px}
+.modal-x{border:none;background:none;font-size:20px;cursor:pointer;color:var(--t2)}
+.modal-b{padding:10px 16px 16px}
+.opt{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;margin-top:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--surf);cursor:pointer;font-family:var(--font);font-size:13px;text-align:left}
+.opt:hover{background:var(--bg);border-color:var(--blue)}
+.opt.cur{border-color:var(--blue);background:var(--blue-bg)}
+.opt-note{font-size:11px;color:var(--t2);margin-left:auto;text-align:right}
+.opt-note.warn{color:var(--red)}
+.opt-ext{display:flex;gap:6px;margin-top:10px}
+.opt-ext input{flex:1;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-family:var(--font);font-size:13px;text-transform:uppercase}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2);margin:10px 0}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #e65100;vertical-align:-1px}
 .rules{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;font-size:12px;color:var(--t2);line-height:1.7}
@@ -124,12 +140,13 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
     <h2>Décompte T4 (mardi + jeudi-Consult. 1 uniquement)</h2>
     <div class="stats" id="stats"></div>
     <div id="check"></div>
+    <div id="forces"></div>
 
     <h2>Planning hebdomadaire</h2>
     <div class="legend">
       <span><span class="sw"></span> Colonnes orange : créneaux comptés au décompte</span>
-      <span>✎ Override manuel</span>
-      <span>Survoler une case : praticiens exclus ce jour-là et pourquoi</span>
+      <span>📌 Praticien forcé manuellement</span>
+      <span><b>Cliquer sur une case</b> pour forcer un praticien (ou revenir au calcul automatique)</span>
     </div>
     <div class="tbl-wrap"><table id="plan"></table></div>
 
@@ -161,7 +178,7 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 
   <!-- ── MAR ── -->
   <div class="view" id="view-mar">
-    <p class="hint">Les 3 MAR titulaires assurent obligatoirement le mardi et le jeudi-Consult. 1. Modifier les initiales remplace le MAR partout (planning, indisponibilités, semaine de référence). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
+    <p class="hint">Les 3 MAR titulaires assurent obligatoirement le mardi et le jeudi-Consult. 1. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
     <div class="mar-cards" id="mar-cards"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
@@ -173,6 +190,12 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeForce()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-h"><div id="modal-title"></div><button class="modal-x" onclick="closeForce()" aria-label="Fermer">×</button></div>
+    <div class="modal-b" id="modal-body"></div>
+  </div>
+</div>
 
 <script src="consultations-engine.js"></script>
 <script>
@@ -236,7 +259,7 @@ function showTab(id){
 // ── Planning ─────────────────────────────────────────────────
 function recompute(){
   result = E.generate(cfg);
-  renderStats(); renderPlan(); renderTotaux(); renderRules();
+  renderStats(); renderForces(); renderPlan(); renderTotaux(); renderRules();
 }
 
 function renderStats(){
@@ -255,6 +278,79 @@ function renderStats(){
     : `<div class="ok good">✅ Toutes les règles sont respectées (indispos, reports de bloc, exclusivité, plafonds, fériés).</div>`;
 }
 
+function renderForces(){
+  const list=[];
+  Object.entries(cfg.overrides).sort().forEach(([mon,ov])=>{
+    if(mon===E.DEFAULT_CONFIG.start) return; // semaine de référence
+    E.SLOTS.forEach(s=>{ if(ov[s.id]) list.push({mon,s,who:ov[s.id]}); });
+  });
+  const al=E.alertes(result);
+  let h='';
+  if(al.length) h+=`<div class="ok info">📌 Forçage(s) en dehors des règles (choix manuel conservé) :<br/>${al.map(esc).join('<br/>')}</div>`;
+  if(list.length){
+    h+=`<div class="ok info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">📌 ${list.length} créneau(x) forcé(s) : ${list.map(f=>`${esc(f.who)} ${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')}
+      <button class="btn btn-r" style="margin-left:auto" onclick="clearForces()">Retirer tous les forçages</button></div>`;
+  }
+  document.getElementById('forces').innerHTML=h;
+}
+
+// ── Forçage d'un praticien ──────────────────────────────────
+let forceCtx=null;
+function openForce(monday,slotId){
+  const w=result.weeks.find(x=>x.monday===monday);
+  const s=E.SLOTS.find(x=>x.id===slotId);
+  const c=w.slots[slotId];
+  if(c.ferie||c.horsPeriode) return;
+  forceCtx={monday,slotId};
+  const forced=(cfg.overrides[monday]||{})[slotId]||null;
+  document.getElementById('modal-title').innerHTML=`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.med?esc(c.med):'—'}${forced?' (forcé)':' (automatique)'}</small>`;
+  const notes=code=>{
+    const n=[];
+    if(c.exclus[code]) n.push(c.exclus[code]);
+    const autres=E.SLOTS.filter(x=>x.id!==slotId&&w.slots[x.id].med===code);
+    if(autres.some(x=>w.slots[x.id].date===c.date)) n.push('déjà en consultation cet après-midi');
+    if(slotId==='mar'&&w.slots.jeu1.med===code) n.push('fait déjà le jeudi-C1');
+    if(slotId==='jeu1'&&w.slots.mar.med===code) n.push('fait déjà le mardi');
+    const t=cfg.titulaires.find(x=>x.code===code);
+    const nb=autres.length;
+    if(t&&nb>=(t.max||cfg.cap)) n.push(`déjà ${nb} consultations cette semaine`);
+    return n;
+  };
+  const extCur=forced&&!codes().includes(forced)&&forced!==E.AUTRE?forced:'';
+  let h=`<button class="opt${!forced?' cur':''}" onclick="setForce(null)">🔄 <b>Automatique</b><span class="opt-note">calcul selon les règles</span></button>`;
+  cfg.titulaires.forEach(t=>{
+    const n=notes(t.code);
+    h+=`<button class="opt${forced===t.code?' cur':''}" onclick="setForce('${esc(t.code)}')">${chip(t.code)}<span class="opt-note${n.length?' warn':''}">${n.length?'⚠️ '+esc(n.join(' · ')):'disponible'}</span></button>`;
+  });
+  h+=`<button class="opt${forced===E.AUTRE?' cur':''}" onclick="setForce('${E.AUTRE}')">${chip(E.AUTRE)}<span class="opt-note">remplaçant non nommé</span></button>`;
+  h+=`<div class="opt-ext"><input id="opt-ext" maxlength="12" placeholder="Autre praticien (ex. AFR)" value="${esc(extCur)}" onkeydown="if(event.key==='Enter')setForceExt()"/><button class="btn btn-g" onclick="setForceExt()">Forcer</button></div>`;
+  document.getElementById('modal-body').innerHTML=h;
+  document.getElementById('modal').classList.add('on');
+}
+function closeForce(){document.getElementById('modal').classList.remove('on');forceCtx=null;}
+function setForce(who){
+  if(!forceCtx) return;
+  const {monday,slotId}=forceCtx;
+  const ov=Object.assign({},cfg.overrides[monday]||{});
+  if(who) ov[slotId]=who; else delete ov[slotId];
+  if(Object.keys(ov).length) cfg.overrides[monday]=ov; else delete cfg.overrides[monday];
+  closeForce();
+  changed();
+  toast(who?`📌 ${who} forcé`:'🔄 Retour au calcul automatique');
+}
+function setForceExt(){
+  const v=document.getElementById('opt-ext').value.trim().toUpperCase();
+  if(!v){toast('Saisir les initiales du praticien');return;}
+  setForce(v==='AUTRE MAR'||v==='AUTRE'?E.AUTRE:v);
+}
+function clearForces(){
+  if(!confirm('Retirer tous les forçages (hors semaine de référence du 28/09) ?')) return;
+  const ref=E.DEFAULT_CONFIG.start;
+  cfg.overrides=cfg.overrides[ref]?{[ref]:cfg.overrides[ref]}:{};
+  changed();toast('Forçages retirés');
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeForce();});
+
 function renderPlan(){
   let h='<thead><tr><th style="text-align:left">Semaine</th>';
   E.SLOTS.forEach(s=>{h+=`<th class="${s.prio===1?'p1':''}">${esc(s.label)}</th>`;});
@@ -271,7 +367,8 @@ function renderPlan(){
       if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
       const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
       const tip=ex?`Exclus le ${E.labelFR(c.date)} :\n${ex}`:`Tous les titulaires disponibles le ${E.labelFR(c.date)}`;
-      h+=`<td class="${c.override?'ov':''}" title="${esc(tip)}">${c.med?chip(c.med):'—'}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
+      const ftip=c.force?`\n📌 Forcé manuellement — cliquer pour modifier`:`\nCliquer pour forcer un praticien`;
+      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
     });
     h+='</tr>';
   });
@@ -305,7 +402,8 @@ function renderRules(){
     <b>Plafond / semaine</b> : ${plaf} — au-delà de ${cfg.cap}, uniquement si cela évite un « Autre MAR ».<br/>
     <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
     <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
-    <b>Semaine du 28/09</b> : overrides manuels (mardi = ${esc(ov.mar||'—')}).`;
+    <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
+    <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.`;
 }
 
 // ── Indisponibilités ────────────────────────────────────────

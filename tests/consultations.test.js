@@ -117,3 +117,49 @@ test('plafond personnalisé : un MAR à 3 / semaine', () => {
     assert.ok(n <= 2, w.monday);
   });
 });
+
+const withForce = (monday, slotId, who) => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.overrides[monday] = Object.assign({}, cfg.overrides[monday], { [slotId]: who });
+  return E.generate(cfg);
+};
+
+test('forcer un praticien : créneau figé, le reste s\'adapte sans erreur', () => {
+  const r = withForce('2026-11-30', 'lun2', 'RW'); // RW calculé en lun1 sans forçage
+  assert.equal(slot('2026-11-30', 'lun1').med, 'RW');
+  const w = r.weeks.find(x => x.monday === '2026-11-30');
+  assert.equal(w.slots.lun2.med, 'RW');
+  assert.ok(w.slots.lun2.force);
+  assert.notEqual(w.slots.lun1.med, 'RW', 'pas 2 consultations le même après-midi');
+  assert.ok(!w.override, 'semaine partiellement forcée');
+  assert.deepEqual(E.verify(r), []);
+  assert.deepEqual(E.alertes(r), []);
+});
+
+test('forcer sur le mardi : exclusivité respectée sur le jeudi-C1', () => {
+  const r = withForce('2026-11-23', 'mar', 'GR');
+  const w = r.weeks.find(x => x.monday === '2026-11-23');
+  assert.equal(w.slots.mar.med, 'GR');
+  assert.notEqual(w.slots.jeu1.med, 'GR');
+  assert.deepEqual(E.verify(r), []);
+  // Report de bloc appliqué au forçage : GR exclu le lundi 30/11
+  assert.match(r.weeks.find(x => x.monday === '2026-11-30').slots.lun1.exclus.GR, /bloc/i);
+});
+
+test('forcer un MAR indisponible : alerte, mais pas d\'erreur', () => {
+  const r = withForce('2026-11-02', 'mar', 'RW'); // RW indisponible le 03/11
+  assert.equal(r.weeks.find(x => x.monday === '2026-11-02').slots.mar.med, 'RW');
+  assert.deepEqual(E.verify(r), []);
+  assert.ok(E.alertes(r).some(a => /RW indisponible/.test(a)));
+});
+
+test('forcer un praticien externe', () => {
+  const r = withForce('2026-10-12', 'jeu2', 'AFR');
+  assert.equal(r.weeks.find(x => x.monday === '2026-10-12').slots.jeu2.med, 'AFR');
+  assert.deepEqual(E.verify(r), []);
+});
+
+test('un forçage sur un jour férié est ignoré', () => {
+  const r = withForce('2026-11-16', 'jeu1', 'RW');
+  assert.equal(r.weeks.find(x => x.monday === '2026-11-16').slots.jeu1.med, null);
+});

@@ -64,7 +64,9 @@
         ...days(12, [11, 28, 29, 30, 31]),
       ],
     },
-    // Overrides manuels, indexés par le lundi de la semaine.
+    // Praticiens forcés, indexés par le lundi de la semaine puis par créneau.
+    // Un créneau forcé n'est pas recalculé ; les autres s'adaptent autour.
+    // (La semaine du 28/09 est entièrement forcée : semaine de référence.)
     overrides: {
       '2026-09-28': { lun1: 'RW', lun2: 'GR', mar: 'AFR', mer: 'SG', jeu1: 'GR', jeu2: 'RW' },
     },
@@ -124,12 +126,14 @@
 
     const weeks = [];
     for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
-      const week = { monday, slots: {}, override: !!cfg.overrides[monday] };
+      const forces = cfg.overrides[monday] || {};
+      const week = { monday, slots: {} };
 
       // Contexte de chaque créneau
       const ctx = SLOTS.map(s => {
         const date = addDays(monday, s.dow);
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
+        info.force = !info.ferie && !info.horsPeriode && forces[s.id] ? forces[s.id] : null;
         info.exclus = {};
         codes.forEach(t => {
           if (indispo[t].has(date)) info.exclus[t] = 'Indisponible';
@@ -138,13 +142,9 @@
         return info;
       });
 
-      let choice;
-      if (week.override) {
-        const ov = cfg.overrides[monday];
-        choice = SLOTS.map(s => ov[s.id] || null);
-      } else {
-        choice = bestWeek(ctx, cum, cfg);
-      }
+      const actifs = ctx.filter(c => !c.ferie && !c.horsPeriode);
+      week.override = actifs.length > 0 && actifs.every(c => c.force);
+      const choice = bestWeek(ctx, cum, cfg);
 
       ctx.forEach((c, i) => {
         const who = choice[i];
@@ -154,6 +154,7 @@
           ferie: c.ferie,
           horsPeriode: c.horsPeriode,
           exclus: c.exclus,
+          force: !!c.force,
           override: week.override,
         };
         if (!who) return;
@@ -171,10 +172,13 @@
   }
 
   // Recherche exhaustive de la meilleure semaine (≤ 4^6 combinaisons).
+  // Les créneaux forcés sont figés ; les autres respectent les règles
+  // vis-à-vis d'eux (même après-midi, mardi/jeudi-C1, plafond).
   function bestWeek(ctx, cum, cfg) {
     const codes = cfg.codes;
     const cands = ctx.map(c => {
       if (c.ferie || c.horsPeriode) return [null];
+      if (c.force) return [c.force];
       return codes.filter(t => !c.exclus[t]).concat([AUTRE]);
     });
 
@@ -182,7 +186,11 @@
     const cur = new Array(ctx.length);
     const load = {};
     codes.forEach(t => { load[t] = 0; });
+    ctx.forEach(c => { if (c.force && load[c.force] !== undefined) load[c.force]++; });
     const iMar = ctx.findIndex(c => c.slot.id === 'mar');
+    const iJeu1 = ctx.findIndex(c => c.slot.id === 'jeu1');
+    // Valeur connue d'un créneau : forcé, ou déjà choisi dans la récursion
+    const known = (j, i) => (ctx[j].force ? ctx[j].force : (j < i ? cur[j] : undefined));
 
     (function rec(i) {
       if (i === ctx.length) {
@@ -190,16 +198,24 @@
         if (!bestScore || lexLess(sc, bestScore)) { bestScore = sc; best = cur.slice(); }
         return;
       }
+      if (ctx[i].force || cands[i][0] === null) {
+        cur[i] = cands[i][0];
+        rec(i + 1);
+        return;
+      }
       for (const who of cands[i]) {
-        const tit = who !== AUTRE && who !== null;
+        const tit = who !== AUTRE;
         if (tit) {
           if (load[who] >= cfg.maxOf[who]) continue;
           // Un praticien ne fait qu'une consultation par après-midi
           let clash = false;
-          for (let j = 0; j < i; j++) if (cur[j] === who && ctx[j].date === ctx[i].date) clash = true;
+          for (let j = 0; j < ctx.length; j++) {
+            if (j !== i && ctx[j].date === ctx[i].date && known(j, i) === who) clash = true;
+          }
           if (clash) continue;
           // Exclusivité : pas mardi ET jeudi-C1 la même semaine
-          if (ctx[i].slot.id === 'jeu1' && iMar < i && cur[iMar] === who) continue;
+          if (i === iJeu1 && known(iMar, i) === who) continue;
+          if (i === iMar && known(iJeu1, i) === who) continue;
         }
         cur[i] = who;
         if (tit) load[who]++;
@@ -224,7 +240,8 @@
     ctx.forEach((c, i) => {
       if (!cur[i]) return;
       if (cur[i] === AUTRE) autre[c.slot.prio]++;
-      else add[cur[i]][c.slot.prio]++;
+      else if (add[cur[i]]) add[cur[i]][c.slot.prio]++;
+      // (praticien externe forcé, ex. AFR : identique dans toutes les combinaisons)
     });
     const bal = prio => codes.reduce((acc, t) => {
       const v = cum[t][prio] + add[t][prio];
@@ -283,27 +300,29 @@
   }
 
   // ── Vérification de toutes les règles ───────────────────────
-  function verify(result) {
+  // Chaque écart est rattaché aux créneaux concernés : s'il implique un
+  // créneau forcé, c'est une alerte (choix manuel), sinon une erreur.
+  function check(result) {
     const { config: cfg, weeks } = result;
     const codes = cfg.codes;
     const isTit = m => codes.includes(m);
-    const errors = [];
+    const issues = [];
+    const add = (msg, ...cells) => issues.push({ msg, force: cells.some(c => c && c.force) });
     const indispo = {};
     codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
     const blocked = {};
 
     weeks.forEach(w => {
-      const load = {};
+      const cellsOf = {};
       SLOTS.forEach(s => {
         const c = w.slots[s.id];
         const who = c.med;
-        if (c.ferie && who) errors.push(`${c.date} férié mais attribué à ${who}`);
-        if (!c.ferie && !c.horsPeriode && !who) errors.push(`${c.date} ${s.label} non attribué`);
+        if (c.ferie && who) add(`${c.date} férié mais attribué à ${who}`, c);
+        if (!c.ferie && !c.horsPeriode && !who) add(`${c.date} ${s.label} non attribué`, c);
         if (!who || !isTit(who)) return;
-        load[who] = (load[who] || 0) + 1;
-        if (w.override) return;
-        if (indispo[who].has(c.date)) errors.push(`${c.date} ${s.label} : ${who} indisponible`);
-        if (blocked[c.date] && blocked[c.date].has(who)) errors.push(`${c.date} ${s.label} : ${who} au bloc (report)`);
+        (cellsOf[who] = cellsOf[who] || []).push(c);
+        if (indispo[who].has(c.date)) add(`${labelFR(c.date)} ${s.label} : ${who} indisponible`, c);
+        if (blocked[c.date] && blocked[c.date].has(who)) add(`${labelFR(c.date)} ${s.label} : ${who} au bloc (report)`, c);
       });
       SLOTS.forEach(s => {
         const c = w.slots[s.id];
@@ -312,33 +331,37 @@
           (blocked[t] = blocked[t] || new Set()).add(c.med);
         }
       });
-      if (w.override) return;
 
-      const mar = w.slots.mar.med, jeu1 = w.slots.jeu1.med;
-      if (mar && mar === jeu1 && isTit(mar)) errors.push(`Semaine ${w.monday} : ${mar} fait mardi ET jeudi-C1`);
-      if (w.slots.lun1.med && w.slots.lun1.med === w.slots.lun2.med && isTit(w.slots.lun1.med))
-        errors.push(`Semaine ${w.monday} : ${w.slots.lun1.med} sur les 2 consultations du lundi`);
-      if (w.slots.jeu1.med && w.slots.jeu1.med === w.slots.jeu2.med && isTit(w.slots.jeu1.med))
-        errors.push(`Semaine ${w.monday} : ${w.slots.jeu1.med} sur les 2 consultations du jeudi`);
-      Object.entries(load).forEach(([t, n]) => {
-        if (n > cfg.maxOf[t]) errors.push(`Semaine ${w.monday} : ${t} a ${n} consultations (max ${cfg.maxOf[t]})`);
+      const sl = w.slots;
+      const sem = `Semaine du ${labelFR(w.monday)}`;
+      if (isTit(sl.mar.med) && sl.mar.med === sl.jeu1.med) add(`${sem} : ${sl.mar.med} fait mardi ET jeudi-C1`, sl.mar, sl.jeu1);
+      if (isTit(sl.lun1.med) && sl.lun1.med === sl.lun2.med) add(`${sem} : ${sl.lun1.med} sur les 2 consultations du lundi`, sl.lun1, sl.lun2);
+      if (isTit(sl.jeu1.med) && sl.jeu1.med === sl.jeu2.med) add(`${sem} : ${sl.jeu1.med} sur les 2 consultations du jeudi`, sl.jeu1, sl.jeu2);
+      Object.entries(cellsOf).forEach(([t, cells]) => {
+        if (cells.length > cfg.maxOf[t]) add(`${sem} : ${t} a ${cells.length} consultations (max ${cfg.maxOf[t]})`, ...cells);
       });
 
       // Exclusivité : "Autre MAR" sur mardi / jeudi-C1 seulement si aucun titulaire n'était éligible
       ['mar', 'jeu1'].forEach(id => {
-        const c = w.slots[id];
-        if (c.med !== AUTRE) return;
-        const other = id === 'mar' ? jeu1 : mar;
-        const eligibles = codes.filter(t => !c.exclus[t] && t !== other && (load[t] || 0) < cfg.maxOf[t]);
-        if (eligibles.length) errors.push(`${c.date} ${id} : Autre MAR alors que ${eligibles.join(', ')} éligible(s)`);
+        const c = sl[id];
+        if (c.med !== AUTRE || c.force) return;
+        const other = id === 'mar' ? sl.jeu1.med : sl.mar.med;
+        const eligibles = codes.filter(t => !c.exclus[t] && t !== other
+          && (cellsOf[t] || []).length < cfg.maxOf[t]
+          && !(cellsOf[t] || []).some(x => x.date === c.date));
+        if (eligibles.length) add(`${labelFR(c.date)} ${id} : Autre MAR alors que ${eligibles.join(', ')} éligible(s)`, c);
       });
     });
-    return errors;
+    return issues;
   }
+  // Règles non respectées par le calcul automatique (doit être vide).
+  function verify(result) { return check(result).filter(i => !i.force).map(i => i.msg); }
+  // Écarts aux règles causés par un praticien forcé manuellement.
+  function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
     TITULAIRES, AUTRE, SLOTS, REPORT_BLOC, DEFAULT_CONFIG,
-    generate, verify, decompte, totaux, addDays, labelFR, renameTitulaire,
+    generate, verify, alertes, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
