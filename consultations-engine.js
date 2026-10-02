@@ -6,7 +6,6 @@
 (function (root) {
   'use strict';
 
-  const TITULAIRES = ['RW', 'SG', 'GR'];
   const AUTRE = 'Autre MAR';
 
   // Créneaux de consultation (après-midi). dow : 0 = lundi … 3 = jeudi.
@@ -35,9 +34,15 @@
   const DEFAULT_CONFIG = {
     start: '2026-09-28', // lundi de la semaine de référence
     end: '2026-12-31',
-    // Plafond hebdomadaire normal ; RW peut monter à rwMax.
+    // Plafond hebdomadaire normal ; un titulaire dont "max" est plus élevé
+    // ne le dépasse que si cela évite un "Autre MAR".
     cap: 2,
-    rwMax: 3,
+    // Les 3 MAR titulaires (modifiables depuis l'onglet "MAR").
+    titulaires: [
+      { code: 'RW', couleur: '#0550ae', max: 3 },
+      { code: 'SG', couleur: '#9333ea', max: 2 },
+      { code: 'GR', couleur: '#1b5e20', max: 2 },
+    ],
     feries: {
       '2026-11-19': 'Fête Nationale Monégasque',
       '2026-12-08': 'Immaculée Conception',
@@ -64,6 +69,7 @@
       '2026-09-28': { lun1: 'RW', lun2: 'GR', mar: 'AFR', mer: 'SG', jeu1: 'GR', jeu2: 'RW' },
     },
   };
+  const TITULAIRES = DEFAULT_CONFIG.titulaires.map(t => t.code);
 
   // ── Dates (UTC pour éviter tout décalage de fuseau) ─────────
   function parseISO(iso) {
@@ -81,17 +87,40 @@
     return `${d}/${m}`;
   }
 
-  const isTitulaire = m => TITULAIRES.includes(m);
+  function resolveConfig(userConfig) {
+    const cfg = Object.assign({}, DEFAULT_CONFIG, userConfig || {});
+    cfg.codes = cfg.titulaires.map(t => t.code);
+    cfg.maxOf = {};
+    cfg.titulaires.forEach(t => { cfg.maxOf[t.code] = t.max || cfg.cap; });
+    return cfg;
+  }
+
+  // Renomme un titulaire : reporte ses indisponibilités et overrides
+  // sur le nouveau code. Renvoie une nouvelle config (sans muter l'ancienne).
+  function renameTitulaire(config, oldCode, newCode) {
+    const cfg = JSON.parse(JSON.stringify(config));
+    cfg.titulaires.forEach(t => { if (t.code === oldCode) t.code = newCode; });
+    if (cfg.indispos && cfg.indispos[oldCode]) {
+      cfg.indispos[newCode] = cfg.indispos[oldCode];
+      delete cfg.indispos[oldCode];
+    }
+    Object.values(cfg.overrides || {}).forEach(ov => {
+      Object.keys(ov).forEach(k => { if (ov[k] === oldCode) ov[k] = newCode; });
+    });
+    return cfg;
+  }
 
   // ── Génération ──────────────────────────────────────────────
   function generate(userConfig) {
-    const cfg = Object.assign({}, DEFAULT_CONFIG, userConfig || {});
+    const cfg = resolveConfig(userConfig);
+    const codes = cfg.codes;
+    const isTit = m => codes.includes(m);
     const indispo = {};
-    TITULAIRES.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
+    codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
 
     const blocked = {};   // iso → Map(praticien → raison)
     const cum = {};       // cumuls par priorité
-    TITULAIRES.forEach(t => { cum[t] = { 1: 0, 2: 0, 3: 0 }; });
+    codes.forEach(t => { cum[t] = { 1: 0, 2: 0, 3: 0 }; });
 
     const weeks = [];
     for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
@@ -102,7 +131,7 @@
         const date = addDays(monday, s.dow);
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
         info.exclus = {};
-        TITULAIRES.forEach(t => {
+        codes.forEach(t => {
           if (indispo[t].has(date)) info.exclus[t] = 'Indisponible';
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
         });
@@ -128,9 +157,9 @@
           override: week.override,
         };
         if (!who) return;
-        if (isTitulaire(who)) cum[who][c.slot.prio]++;
+        if (isTit(who)) cum[who][c.slot.prio]++;
         const rep = REPORT_BLOC[c.slot.id];
-        if (rep && isTitulaire(who)) {
+        if (rep && isTit(who)) {
           const target = addDays(c.date, rep.offset);
           if (!blocked[target]) blocked[target] = new Map();
           blocked[target].set(who, `Au bloc (report ${c.slot.label} du ${labelFR(c.date)})`);
@@ -143,39 +172,39 @@
 
   // Recherche exhaustive de la meilleure semaine (≤ 4^6 combinaisons).
   function bestWeek(ctx, cum, cfg) {
+    const codes = cfg.codes;
     const cands = ctx.map(c => {
       if (c.ferie || c.horsPeriode) return [null];
-      return TITULAIRES.filter(t => !c.exclus[t]).concat([AUTRE]);
+      return codes.filter(t => !c.exclus[t]).concat([AUTRE]);
     });
 
     let best = null, bestScore = null;
     const cur = new Array(ctx.length);
-    const load = { RW: 0, SG: 0, GR: 0 };
+    const load = {};
+    codes.forEach(t => { load[t] = 0; });
+    const iMar = ctx.findIndex(c => c.slot.id === 'mar');
 
     (function rec(i) {
       if (i === ctx.length) {
-        const sc = score(ctx, cur, cum);
+        const sc = score(ctx, cur, cum, cfg);
         if (!bestScore || lexLess(sc, bestScore)) { bestScore = sc; best = cur.slice(); }
         return;
       }
       for (const who of cands[i]) {
-        if (isTitulaire(who)) {
-          const max = who === 'RW' ? cfg.rwMax : cfg.cap;
-          if (load[who] >= max) continue;
+        const tit = who !== AUTRE && who !== null;
+        if (tit) {
+          if (load[who] >= cfg.maxOf[who]) continue;
           // Un praticien ne fait qu'une consultation par après-midi
           let clash = false;
           for (let j = 0; j < i; j++) if (cur[j] === who && ctx[j].date === ctx[i].date) clash = true;
           if (clash) continue;
           // Exclusivité : pas mardi ET jeudi-C1 la même semaine
-          if (ctx[i].slot.id === 'jeu1') {
-            const iMar = ctx.findIndex(c => c.slot.id === 'mar');
-            if (iMar < i && cur[iMar] === who) continue;
-          }
+          if (ctx[i].slot.id === 'jeu1' && iMar < i && cur[iMar] === who) continue;
         }
         cur[i] = who;
-        if (isTitulaire(who)) load[who]++;
+        if (tit) load[who]++;
         rec(i + 1);
-        if (isTitulaire(who)) load[who]--;
+        if (tit) load[who]--;
       }
     })(0);
     return best;
@@ -184,35 +213,37 @@
   // Score lexicographique (plus petit = meilleur) :
   //  1. priorité 1 (mardi + jeudi-C1) : nb "Autre MAR", puis équilibre
   //  2. nb "Autre MAR" sur les autres créneaux
-  //  3. RW au-delà de 2 (accepté seulement si ça évite un "Autre MAR")
+  //  3. dépassement du plafond normal (accepté seulement si ça évite un "Autre MAR")
   //  4. équilibre priorité 2 (lundi-C1 + mercredi), puis rotation priorité 3
   // Équilibre = somme des carrés des cumuls → favorise les cumuls les plus bas.
-  function score(ctx, cur, cum) {
+  function score(ctx, cur, cum, cfg) {
+    const codes = cfg.codes;
     const autre = { 1: 0, 2: 0, 3: 0 };
     const add = {};
-    TITULAIRES.forEach(t => { add[t] = { 1: 0, 2: 0, 3: 0 }; });
+    codes.forEach(t => { add[t] = { 1: 0, 2: 0, 3: 0 }; });
     ctx.forEach((c, i) => {
       if (!cur[i]) return;
       if (cur[i] === AUTRE) autre[c.slot.prio]++;
       else add[cur[i]][c.slot.prio]++;
     });
-    const bal = prio => TITULAIRES.reduce((acc, t) => {
+    const bal = prio => codes.reduce((acc, t) => {
       const v = cum[t][prio] + add[t][prio];
       return acc + v * v;
     }, 0);
-    const weekRW = add.RW[1] + add.RW[2] + add.RW[3];
-    const tot = TITULAIRES.reduce((acc, t) => {
+    const depassement = codes.reduce((acc, t) =>
+      acc + Math.max(0, add[t][1] + add[t][2] + add[t][3] - cfg.cap), 0);
+    const tot = codes.reduce((acc, t) => {
       const v = [1, 2, 3].reduce((a, p) => a + cum[t][p] + add[t][p], 0);
       return acc + v * v;
     }, 0);
     return [
       autre[1], bal(1),
       autre[2] + autre[3],
-      Math.max(0, weekRW - 2),
+      depassement,
       autre[2], bal(2), bal(3),
       tot,
       // Départage final stable
-      cur.map(w => (w === null ? 0 : TITULAIRES.indexOf(w) + 1)).join(''),
+      cur.map(w => (w === null ? 0 : codes.indexOf(w) + 1)).join(''),
     ];
   }
   function lexLess(a, b) {
@@ -254,9 +285,11 @@
   // ── Vérification de toutes les règles ───────────────────────
   function verify(result) {
     const { config: cfg, weeks } = result;
+    const codes = cfg.codes;
+    const isTit = m => codes.includes(m);
     const errors = [];
     const indispo = {};
-    TITULAIRES.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
+    codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
     const blocked = {};
 
     weeks.forEach(w => {
@@ -266,7 +299,7 @@
         const who = c.med;
         if (c.ferie && who) errors.push(`${c.date} férié mais attribué à ${who}`);
         if (!c.ferie && !c.horsPeriode && !who) errors.push(`${c.date} ${s.label} non attribué`);
-        if (!who || !isTitulaire(who)) return;
+        if (!who || !isTit(who)) return;
         load[who] = (load[who] || 0) + 1;
         if (w.override) return;
         if (indispo[who].has(c.date)) errors.push(`${c.date} ${s.label} : ${who} indisponible`);
@@ -274,7 +307,7 @@
       });
       SLOTS.forEach(s => {
         const c = w.slots[s.id];
-        if (REPORT_BLOC[s.id] && isTitulaire(c.med)) {
+        if (REPORT_BLOC[s.id] && isTit(c.med)) {
           const t = addDays(c.date, REPORT_BLOC[s.id].offset);
           (blocked[t] = blocked[t] || new Set()).add(c.med);
         }
@@ -282,14 +315,13 @@
       if (w.override) return;
 
       const mar = w.slots.mar.med, jeu1 = w.slots.jeu1.med;
-      if (mar && mar === jeu1 && isTitulaire(mar)) errors.push(`Semaine ${w.monday} : ${mar} fait mardi ET jeudi-C1`);
-      if (w.slots.lun1.med && w.slots.lun1.med === w.slots.lun2.med && isTitulaire(w.slots.lun1.med))
+      if (mar && mar === jeu1 && isTit(mar)) errors.push(`Semaine ${w.monday} : ${mar} fait mardi ET jeudi-C1`);
+      if (w.slots.lun1.med && w.slots.lun1.med === w.slots.lun2.med && isTit(w.slots.lun1.med))
         errors.push(`Semaine ${w.monday} : ${w.slots.lun1.med} sur les 2 consultations du lundi`);
-      if (w.slots.jeu1.med && w.slots.jeu1.med === w.slots.jeu2.med && isTitulaire(w.slots.jeu1.med))
+      if (w.slots.jeu1.med && w.slots.jeu1.med === w.slots.jeu2.med && isTit(w.slots.jeu1.med))
         errors.push(`Semaine ${w.monday} : ${w.slots.jeu1.med} sur les 2 consultations du jeudi`);
       Object.entries(load).forEach(([t, n]) => {
-        const max = t === 'RW' ? cfg.rwMax : cfg.cap;
-        if (n > max) errors.push(`Semaine ${w.monday} : ${t} a ${n} consultations (max ${max})`);
+        if (n > cfg.maxOf[t]) errors.push(`Semaine ${w.monday} : ${t} a ${n} consultations (max ${cfg.maxOf[t]})`);
       });
 
       // Exclusivité : "Autre MAR" sur mardi / jeudi-C1 seulement si aucun titulaire n'était éligible
@@ -297,7 +329,7 @@
         const c = w.slots[id];
         if (c.med !== AUTRE) return;
         const other = id === 'mar' ? jeu1 : mar;
-        const eligibles = TITULAIRES.filter(t => !c.exclus[t] && t !== other && (load[t] || 0) < (t === 'RW' ? cfg.rwMax : cfg.cap));
+        const eligibles = codes.filter(t => !c.exclus[t] && t !== other && (load[t] || 0) < cfg.maxOf[t]);
         if (eligibles.length) errors.push(`${c.date} ${id} : Autre MAR alors que ${eligibles.join(', ')} éligible(s)`);
       });
     });
@@ -306,7 +338,8 @@
 
   const api = {
     TITULAIRES, AUTRE, SLOTS, REPORT_BLOC, DEFAULT_CONFIG,
-    generate, verify, decompte, totaux, addDays, labelFR, isTitulaire,
+    generate, verify, decompte, totaux, addDays, labelFR, renameTitulaire,
+    isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ConsultEngine = api;

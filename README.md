@@ -49,4 +49,9 @@ Page dédiée : `consultations.html` (lien : `https://TON-PSEUDO.github.io/plann
 | `consultations-engine.js` | Moteur de génération : règles, indisponibilités, fériés, overrides (section `DEFAULT_CONFIG`) |
 | `tests/consultations.test.js` | Vérification automatique des règles (`node --test tests/*.test.js`) |
 
-Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités, fériés monégasques 19/11 et 08/12, overrides de la semaine du 28/09. Pour modifier une indisponibilité, éditer `DEFAULT_CONFIG.indispos` dans `consultations-engine.js`.
+Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités, fériés monégasques 19/11 et 08/12, overrides de la semaine du 28/09. Onglets de la page :
+- **📅 Planning** : planning hebdomadaire, décompte, totaux, export CSV.
+- **🚫 Indisponibilités** : choisir un MAR puis cliquer sur les jours (ou saisir une période) ; le planning est recalculé immédiatement.
+- **👨‍⚕️ MAR** : modifier les initiales, la couleur et le plafond hebdomadaire des 3 MAR titulaires. Un changement d'initiales est reporté sur les indisponibilités et la semaine de référence.
+
+Les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).

@@ -17,17 +17,26 @@
 body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px}
 .bar{background:var(--head);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
 .bar-title{color:#e6edf3;font-size:15px;font-weight:600}.bar-sub{color:#7d8590;font-size:12px}
-.bar-right{margin-left:auto;display:flex;gap:8px}
+.bar-right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bd);cursor:pointer;font-size:13px;font-family:var(--font);font-weight:500;background:var(--surf);color:var(--text);text-decoration:none}
 .btn:hover{background:var(--bg)}
+.btn-g{background:var(--gbtn);border-color:rgba(0,0,0,.15);color:#fff}.btn-g:hover{background:#2c974b}
+.btn-r{color:var(--red)}.btn-r:hover{background:var(--red-bg)}
 .wrap{max-width:1300px;margin:0 auto;padding:20px 16px}
+.tabs{border-bottom:1px solid var(--bd);margin-bottom:18px;display:flex;overflow-x:auto}
+.tab{padding:8px 16px;font-size:14px;color:var(--t2);cursor:pointer;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;background:none;font-family:var(--font);white-space:nowrap}
+.tab:hover{color:var(--text)}.tab.on{color:var(--text);font-weight:600;border-bottom-color:#fd8c73}
+.view{display:none}.view.on{display:block}
 h2{font-size:15px;margin:22px 0 10px}
+h2:first-child{margin-top:0}
+.hint{font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:8px}
 .stat{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:11px 13px}
 .stat-l{font-size:11px;color:var(--t2);margin-bottom:2px}.stat-v{font-size:22px;font-weight:600}.stat-s{font-size:11px;color:var(--t3);margin-top:2px}
 .ok{padding:9px 14px;border-radius:var(--r);font-size:13px;margin:12px 0;border:1px solid}
 .ok.good{background:#dafbe1;border-color:#4ac26b;color:#1a7f37}
 .ok.bad{background:var(--red-bg);border-color:#ff8182;color:var(--red)}
+.ok.info{background:var(--yel-bg);border-color:#d4a72c;color:var(--yel)}
 .tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--surf)}
 table{width:100%;border-collapse:collapse;min-width:760px}
 th{padding:7px 9px;background:var(--bg);border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--t2);text-align:center;white-space:nowrap}
@@ -44,11 +53,51 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .ov{position:relative}
 .ov::after{content:"✎";position:absolute;top:1px;right:3px;font-size:9px;color:#bc4c00}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2);margin:10px 0}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #e65100;vertical-align:-1px}
 .rules{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;font-size:12px;color:var(--t2);line-height:1.7}
 .rules b{color:var(--text)}
-.ind{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
-.ind-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 13px;font-size:12px;line-height:1.6}
-.ind-card b{font-size:13px}
+
+/* Indisponibilités */
+.mar-pick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.mar-btn{padding:5px 16px;border-radius:20px;border:2px solid var(--bd);background:var(--surf);cursor:pointer;font-size:13px;font-weight:700;font-family:var(--font)}
+.ind-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
+@media(max-width:800px){.ind-layout{grid-template-columns:1fr}}
+.cal-months{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.cal-block{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.cal-hdr-m{padding:8px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-weight:600;font-size:13px;display:flex;justify-content:space-between}
+.cal-hdr-m small{font-weight:400;color:var(--t2)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);padding:6px;gap:3px}
+.cal-dn{text-align:center;font-size:10px;font-weight:600;color:var(--t2);padding:2px 0}
+.cal-dn.we{color:var(--red)}
+.cal-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:5px;font-size:12px;font-weight:500;user-select:none;border:1px solid transparent;position:relative}
+.cal-day.empty{visibility:hidden}
+.cal-day.we{color:var(--t3);font-weight:400;font-size:11px}
+.cal-day.ferie-d{background:#f0f0f0;color:var(--t3);text-decoration:line-through}
+.cal-day.click{cursor:pointer}
+.cal-day.click:hover{border-color:var(--blue)}
+.cal-day.sel{color:#fff;font-weight:700}
+.dots{display:flex;gap:2px;position:absolute;bottom:2px}
+.dot{width:5px;height:5px;border-radius:50%}
+.side{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;position:sticky;top:70px}
+.side-h{padding:9px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-weight:600;font-size:13px}
+.side-b{padding:10px 13px;font-size:12px;line-height:1.7;max-height:60vh;overflow:auto}
+.side-b .grp{margin-bottom:10px}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;background:var(--red-bg);color:var(--red);margin:2px 2px 0 0;font-size:11px}
+.tag button{border:none;background:none;color:var(--red);cursor:pointer;font-size:12px;line-height:1}
+.range{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:14px;background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:9px 12px}
+.range input{padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r);font-family:var(--font);font-size:12px}
+
+/* MAR */
+.mar-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:14px}
+.mar-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:14px;border-top:4px solid}
+.mar-card label{display:block;font-size:11px;font-weight:600;color:var(--t2);margin:10px 0 4px}
+.mar-card label:first-child{margin-top:0}
+.mar-card input[type=text],.mar-card select{width:100%;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px;font-family:var(--font)}
+.mar-card input[type=text]{text-transform:uppercase;font-weight:700;letter-spacing:1px}
+.mar-card input[type=color]{width:50px;height:32px;border:1px solid var(--bd);border-radius:var(--r);padding:2px;background:var(--surf);cursor:pointer}
+.mar-card .meta{font-size:11px;color:var(--t3);margin-top:10px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--head);color:#fff;padding:9px 18px;border-radius:var(--r);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50;max-width:90vw}
+.toast.on{opacity:1}
 </style>
 </head>
 <body>
@@ -64,59 +113,138 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 </div>
 
 <div class="wrap">
-  <h2>Décompte T4 (mardi + jeudi-Consult. 1 uniquement)</h2>
-  <div class="stats" id="stats"></div>
-  <div id="check"></div>
-
-  <h2>Planning hebdomadaire</h2>
-  <div class="legend">
-    <span><span class="chip" style="background:#e65100">&nbsp;</span> Colonnes orange : créneaux comptés au décompte</span>
-    <span>✎ Override manuel</span>
-    <span>Survoler une case : praticiens exclus ce jour-là et pourquoi</span>
+  <div class="tabs">
+    <button class="tab on" id="tab-planning" onclick="showTab('planning')">📅 Planning</button>
+    <button class="tab" id="tab-indispos" onclick="showTab('indispos')">🚫 Indisponibilités</button>
+    <button class="tab" id="tab-mar" onclick="showTab('mar')">👨‍⚕️ MAR</button>
   </div>
-  <div class="tbl-wrap"><table id="plan"></table></div>
 
-  <h2>Total des consultations par praticien</h2>
-  <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
+  <!-- ── PLANNING ── -->
+  <div class="view on" id="view-planning">
+    <h2>Décompte T4 (mardi + jeudi-Consult. 1 uniquement)</h2>
+    <div class="stats" id="stats"></div>
+    <div id="check"></div>
 
-  <h2>Indisponibilités &amp; jours fériés</h2>
-  <div class="ind" id="indispos"></div>
+    <h2>Planning hebdomadaire</h2>
+    <div class="legend">
+      <span><span class="sw"></span> Colonnes orange : créneaux comptés au décompte</span>
+      <span>✎ Override manuel</span>
+      <span>Survoler une case : praticiens exclus ce jour-là et pourquoi</span>
+    </div>
+    <div class="tbl-wrap"><table id="plan"></table></div>
 
-  <h2>Règles appliquées</h2>
-  <div class="rules">
-    <b>Structure</b> : lundi 2 consultations, mardi 1, mercredi 1, jeudi 2.<br/>
-    <b>Report de bloc</b> : praticien du mardi → bloc le lundi suivant ; praticien du jeudi-Consult. 1 → bloc le mardi suivant.<br/>
-    <b>Exclusivité</b> : mardi et jeudi-C1 toujours RW / SG / GR (« Autre MAR » seulement si aucun n'est éligible) ; jamais le même titulaire sur les deux la même semaine.<br/>
-    <b>Plafond</b> : SG et GR 2 consultations / semaine ; RW jusqu'à 3, uniquement si cela évite un « Autre MAR ».<br/>
-    <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
-    <b>Fériés</b> : 19/11 et 08/12 — pas de consultation, pas de report de bloc.<br/>
-    <b>Semaine du 28/09</b> : overrides manuels (mardi = AFR, externe).
+    <h2>Total des consultations par praticien</h2>
+    <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
+
+    <h2>Règles appliquées</h2>
+    <div class="rules" id="rules"></div>
+  </div>
+
+  <!-- ── INDISPONIBILITÉS ── -->
+  <div class="view" id="view-indispos">
+    <p class="hint">Choisir un MAR puis cliquer sur les jours pour ajouter ou retirer une indisponibilité. Le planning est recalculé immédiatement. Les points sous chaque jour montrent les indisponibilités des autres MAR.</p>
+    <div class="mar-pick" id="ind-pick"></div>
+    <div class="range">
+      <b>Période :</b> du <input type="date" id="rg-from" min="2026-09-28" max="2026-12-31"/>
+      au <input type="date" id="rg-to" min="2026-09-28" max="2026-12-31"/>
+      <button class="btn" onclick="applyRange(true)">+ Ajouter</button>
+      <button class="btn btn-r" onclick="applyRange(false)">− Retirer</button>
+    </div>
+    <div class="ind-layout">
+      <div class="cal-months" id="cal"></div>
+      <div class="side">
+        <div class="side-h">Récapitulatif</div>
+        <div class="side-b" id="ind-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAR ── -->
+  <div class="view" id="view-mar">
+    <p class="hint">Les 3 MAR titulaires assurent obligatoirement le mardi et le jeudi-Consult. 1. Modifier les initiales remplace le MAR partout (planning, indisponibilités, semaine de référence). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
+    <div class="mar-cards" id="mar-cards"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
+      <button class="btn" onclick="exportConfig()">⬇ Exporter la configuration (JSON)</button>
+      <label class="btn">⬆ Importer<input type="file" accept="application/json" style="display:none" onchange="importConfig(this)"/></label>
+      <button class="btn btn-r" onclick="resetConfig()">↺ Revenir aux valeurs d'origine</button>
+    </div>
+    <div class="ok info" style="margin-top:14px">Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager ou les conserver, utiliser « Exporter la configuration », puis « Importer » sur un autre poste.</div>
   </div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script src="consultations-engine.js"></script>
 <script>
 const E = window.ConsultEngine;
-const COLORS = {RW:'#0550ae', SG:'#9333ea', GR:'#1b5e20', AFR:'#0891b2'};
+const STORE_KEY = 'consult_anesth_cfg_2026';
+const EXTRA_COLORS = {AFR:'#0891b2'};
 const MOIS = ['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
-const result = E.generate();
+const MOIS_LONG = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const CAL_MONTHS = [10,11,12];
 
+let cfg = loadConfig();
+let result = null;
+let indMar = cfg.titulaires[0].code;
+
+// ── Persistance ──────────────────────────────────────────────
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function loadConfig(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      if(validConfig(saved)) return Object.assign(clone(E.DEFAULT_CONFIG), saved);
+    }
+  }catch(e){}
+  return clone(E.DEFAULT_CONFIG);
+}
+function validConfig(c){
+  return c && Array.isArray(c.titulaires) && c.titulaires.length===3
+    && c.titulaires.every(t=>t && typeof t.code==='string' && t.code)
+    && c.indispos && typeof c.indispos==='object';
+}
+function saveConfig(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify({titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides})); }
+  catch(e){ toast('⚠️ Enregistrement impossible dans ce navigateur'); }
+}
+
+// ── Utilitaires ──────────────────────────────────────────────
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function colorOf(m){
+  const t=cfg.titulaires.find(x=>x.code===m);
+  return t?t.couleur:(EXTRA_COLORS[m]||'#57606a');
+}
+function codes(){return cfg.titulaires.map(t=>t.code);}
 function chip(m){
   if(m===E.AUTRE) return `<span class="chip autre">Autre MAR</span>`;
-  return `<span class="chip" style="background:${COLORS[m]||'#57606a'}">${esc(m)}</span>`;
+  return `<span class="chip" style="background:${colorOf(m)}">${esc(m)}</span>`;
 }
-function weekLabel(monday){
-  const end=E.addDays(monday,3);
-  return `${E.labelFR(monday)} → ${E.labelFR(end)}`;
+function weekLabel(monday){return `${E.labelFR(monday)} → ${E.labelFR(E.addDays(monday,3))}`;}
+function iso(y,m,d){return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+let toastT;
+function toast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200);
+}
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id==='tab-'+id));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='view-'+id));
+  try{localStorage.setItem(STORE_KEY+'_tab',id);}catch(e){}
+}
+
+// ── Planning ─────────────────────────────────────────────────
+function recompute(){
+  result = E.generate(cfg);
+  renderStats(); renderPlan(); renderTotaux(); renderRules();
 }
 
 function renderStats(){
   const d=E.decompte(result.weeks,'2026-10-01','2026-12-31');
   const tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
-  const keys=[...E.TITULAIRES, E.AUTRE];
+  const keys=[...codes(), E.AUTRE];
   document.getElementById('stats').innerHTML=keys.map(k=>`
-    <div class="stat" style="border-top:3px solid ${COLORS[k]||'#8c959f'}">
+    <div class="stat" style="border-top:3px solid ${k===E.AUTRE?'#8c959f':colorOf(k)}">
       <div class="stat-l">${esc(k)}</div>
       <div class="stat-v">${d[k]||0}</div>
       <div class="stat-s">${(tot[k]&&tot[k].total)||0} consultations au total (oct.–déc.)</div>
@@ -153,8 +281,9 @@ function renderPlan(){
 function renderTotaux(){
   const tot=E.totaux(result.weeks);
   const d=E.decompte(result.weeks);
+  const cs=codes();
   const keys=Object.keys(tot).sort((a,b)=>{
-    const o=k=>E.TITULAIRES.includes(k)?E.TITULAIRES.indexOf(k):(k===E.AUTRE?9:5);
+    const o=k=>cs.includes(k)?cs.indexOf(k):(k===E.AUTRE?9:5);
     return o(a)-o(b);
   });
   let h=`<thead><tr><th style="text-align:left">Praticien</th><th class="p1">Décompte<br/>(mardi + jeu. C1)</th><th>Lun. C1 + mercredi</th><th>Lun. C2 + jeu. C2</th><th>Total</th></tr></thead><tbody>`;
@@ -162,22 +291,160 @@ function renderTotaux(){
     const t=tot[k];
     h+=`<tr><td style="text-align:left">${chip(k)}</td><td><b>${d[k]||0}</b></td><td>${t[2]}</td><td>${t[3]}</td><td><b>${t.total}</b></td></tr>`;
   });
-  h+=`</tbody>`;
-  document.getElementById('totaux').innerHTML=h;
+  document.getElementById('totaux').innerHTML=h+'</tbody>';
 }
+
+function renderRules(){
+  const cs=codes();
+  const plaf=cfg.titulaires.map(t=>`${esc(t.code)} ${t.max||cfg.cap}`).join(', ');
+  const ov=cfg.overrides['2026-09-28']||{};
+  document.getElementById('rules').innerHTML=`
+    <b>Structure</b> : lundi 2 consultations, mardi 1, mercredi 1, jeudi 2.<br/>
+    <b>Report de bloc</b> : praticien du mardi → bloc le lundi suivant ; praticien du jeudi-Consult. 1 → bloc le mardi suivant.<br/>
+    <b>Exclusivité</b> : mardi et jeudi-C1 toujours ${cs.map(esc).join(' / ')} (« Autre MAR » seulement si aucun n'est éligible) ; jamais le même titulaire sur les deux la même semaine.<br/>
+    <b>Plafond / semaine</b> : ${plaf} — au-delà de ${cfg.cap}, uniquement si cela évite un « Autre MAR ».<br/>
+    <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
+    <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
+    <b>Semaine du 28/09</b> : overrides manuels (mardi = ${esc(ov.mar||'—')}).`;
+}
+
+// ── Indisponibilités ────────────────────────────────────────
+function indSet(code){return new Set(cfg.indispos[code]||[]);}
+function setIndispos(code,set){cfg.indispos[code]=[...set].sort();}
 
 function renderIndispos(){
-  const cfg=result.config;
-  const fmt=list=>{
-    const byM={};
-    list.forEach(iso=>{const m=Number(iso.slice(5,7));(byM[m]=byM[m]||[]).push(Number(iso.slice(8)));});
-    return Object.entries(byM).map(([m,ds])=>`${MOIS[m]} : ${ds.join(', ')}`).join('<br/>');
-  };
-  let h=E.TITULAIRES.map(t=>`<div class="ind-card" style="border-left:3px solid ${COLORS[t]}"><b>${t}</b><br/>${fmt(cfg.indispos[t])}</div>`).join('');
-  h+=`<div class="ind-card" style="border-left:3px solid var(--red)"><b>Jours fériés (Monaco)</b><br/>${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} — ${esc(n)}`).join('<br/>')}</div>`;
-  document.getElementById('indispos').innerHTML=h;
+  if(!codes().includes(indMar)) indMar=codes()[0];
+  document.getElementById('ind-pick').innerHTML='<span style="font-size:12px;color:var(--t2)">MAR :</span>'+cfg.titulaires.map(t=>{
+    const on=t.code===indMar;
+    return `<button class="mar-btn" onclick="pickMar('${esc(t.code)}')" style="border-color:${t.couleur};${on?`background:${t.couleur};color:#fff`:`color:${t.couleur}`}">${esc(t.code)} <small style="font-weight:400">(${(cfg.indispos[t.code]||[]).length})</small></button>`;
+  }).join('');
+
+  const sel=indSet(indMar);
+  const color=colorOf(indMar);
+  const others=cfg.titulaires.filter(t=>t.code!==indMar).map(t=>({code:t.code,couleur:t.couleur,set:indSet(t.code)}));
+  let h='';
+  CAL_MONTHS.forEach(m=>{
+    const nd=new Date(Date.UTC(2026,m,0)).getUTCDate();
+    const first=(new Date(Date.UTC(2026,m-1,1)).getUTCDay()+6)%7; // lundi=0
+    const cnt=[...sel].filter(d=>Number(d.slice(5,7))===m).length;
+    h+=`<div class="cal-block"><div class="cal-hdr-m">${MOIS_LONG[m]} 2026<small>${cnt} jour(s)</small></div><div class="cal-grid">`;
+    ['L','M','M','J','V','S','D'].forEach((d,i)=>{h+=`<div class="cal-dn${i>=5?' we':''}">${d}</div>`;});
+    for(let i=0;i<first;i++) h+='<div class="cal-day empty"></div>';
+    for(let d=1;d<=nd;d++){
+      const k=iso(2026,m,d);
+      const dow=(first+d-1)%7;
+      if(dow>=5){h+=`<div class="cal-day we">${d}</div>`;continue;}
+      const fer=cfg.feries[k];
+      const on=sel.has(k);
+      const dots=others.filter(o=>o.set.has(k)).map(o=>`<span class="dot" style="background:${o.couleur}" title="${esc(o.code)} indisponible"></span>`).join('');
+      const tip=fer?`Férié : ${fer}`:(on?`${indMar} indisponible — cliquer pour retirer`:`Cliquer pour rendre ${indMar} indisponible`);
+      h+=`<div class="cal-day click${on?' sel':''}${fer?' ferie-d':''}" style="${on?`background:${color}`:''}" title="${esc(tip)}" onclick="toggleDay('${k}')">${d}<span class="dots">${dots}</span></div>`;
+    }
+    h+='</div></div>';
+  });
+  document.getElementById('cal').innerHTML=h;
+
+  document.getElementById('ind-list').innerHTML=cfg.titulaires.map(t=>{
+    const list=[...indSet(t.code)].sort();
+    const tags=list.length?list.map(d=>`<span class="tag">${E.labelFR(d)}<button title="Retirer" onclick="removeDay('${esc(t.code)}','${d}')">×</button></span>`).join(''):'<span style="color:var(--t3)">Aucune</span>';
+    return `<div class="grp"><b style="color:${t.couleur}">${esc(t.code)}</b> — ${list.length} jour(s)<br/>${tags}</div>`;
+  }).join('')+`<div class="grp"><b>Jours fériés</b><br/>${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} — ${esc(n)}`).join('<br/>')}</div>`;
+}
+function pickMar(code){indMar=code;renderIndispos();}
+function toggleDay(k){
+  const s=indSet(indMar);
+  if(s.has(k)){s.delete(k);toast(`${indMar} disponible le ${E.labelFR(k)}`);}
+  else{s.add(k);toast(`${indMar} indisponible le ${E.labelFR(k)}`);}
+  setIndispos(indMar,s);changed();
+}
+function removeDay(code,k){
+  const s=indSet(code);s.delete(k);setIndispos(code,s);changed();
+}
+function applyRange(add){
+  const from=document.getElementById('rg-from').value, to=document.getElementById('rg-to').value||from;
+  if(!from){toast('Choisir une date de début');return;}
+  if(to<from){toast('La date de fin est avant la date de début');return;}
+  const s=indSet(indMar);let n=0;
+  for(let d=from;d<=to;d=E.addDays(d,1)){
+    const dow=(new Date(d+'T00:00:00Z').getUTCDay()+6)%7;
+    if(dow>=5) continue;
+    if(add&&!s.has(d)){s.add(d);n++;}
+    if(!add&&s.has(d)){s.delete(d);n++;}
+  }
+  setIndispos(indMar,s);changed();
+  toast(`${indMar} : ${n} jour(s) ${add?'ajouté(s)':'retiré(s)'}`);
 }
 
+// ── MAR ──────────────────────────────────────────────────────
+function renderMars(){
+  document.getElementById('mar-cards').innerHTML=cfg.titulaires.map((t,i)=>{
+    const nInd=(cfg.indispos[t.code]||[]).length;
+    const d=(result&&E.decompte(result.weeks,'2026-10-01','2026-12-31')[t.code])||0;
+    return `<div class="mar-card" style="border-top-color:${t.couleur}" id="mc-${i}">
+      <label for="mc-code-${i}">Initiales</label>
+      <input type="text" id="mc-code-${i}" value="${esc(t.code)}" maxlength="6" oninput="this.value=this.value.toUpperCase()"/>
+      <label for="mc-col-${i}">Couleur</label>
+      <input type="color" id="mc-col-${i}" value="${esc(t.couleur)}" oninput="document.getElementById('mc-${i}').style.borderTopColor=this.value"/>
+      <label for="mc-max-${i}">Plafond hebdomadaire</label>
+      <select id="mc-max-${i}">
+        <option value="2"${(t.max||2)==2?' selected':''}>2 consultations / semaine</option>
+        <option value="3"${t.max==3?' selected':''}>Jusqu'à 3 (si ça évite un « Autre MAR »)</option>
+      </select>
+      <div class="meta">${nInd} jour(s) d'indisponibilité · décompte T4 : ${d}</div>
+    </div>`;
+  }).join('');
+}
+function saveMars(){
+  const vals=cfg.titulaires.map((t,i)=>({
+    old:t.code,
+    code:document.getElementById('mc-code-'+i).value.trim().toUpperCase(),
+    couleur:document.getElementById('mc-col-'+i).value,
+    max:Number(document.getElementById('mc-max-'+i).value),
+  }));
+  const reserved=['AUTRE','AUTRE MAR','AFR'];
+  for(const v of vals){
+    if(!/^[A-Z0-9À-Ü-]{1,6}$/.test(v.code)){toast(`Initiales invalides : « ${v.code||'vide'} »`);return;}
+    if(reserved.includes(v.code)){toast(`« ${v.code} » est réservé`);return;}
+  }
+  if(new Set(vals.map(v=>v.code)).size!==vals.length){toast('Deux MAR ont les mêmes initiales');return;}
+
+  // Renommage en 2 temps (codes temporaires) pour permettre les permutations
+  let next=clone(cfg);
+  vals.forEach((v,i)=>{ if(v.old!==v.code) next=E.renameTitulaire(next,v.old,'__tmp'+i); });
+  vals.forEach((v,i)=>{ if(v.old!==v.code) next=E.renameTitulaire(next,'__tmp'+i,v.code); });
+  next.titulaires.forEach((t,i)=>{t.couleur=vals[i].couleur;t.max=vals[i].max;});
+  cfg=next;
+  changed();
+  toast('✅ MAR enregistrés');
+}
+function exportConfig(){
+  const data=JSON.stringify({titulaires:cfg.titulaires,indispos:cfg.indispos,overrides:cfg.overrides},null,2);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  a.download='consultations_anesthesie_config.json';
+  a.click();
+}
+function importConfig(input){
+  const f=input.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const c=JSON.parse(rd.result);
+      if(!validConfig(c)) throw new Error('format');
+      cfg=Object.assign(clone(E.DEFAULT_CONFIG),c);
+      changed();toast('✅ Configuration importée');
+    }catch(e){toast('⚠️ Fichier invalide');}
+    input.value='';
+  };
+  rd.readAsText(f);
+}
+function resetConfig(){
+  if(!confirm('Revenir aux MAR et indisponibilités d\'origine ? Les modifications seront perdues.')) return;
+  cfg=clone(E.DEFAULT_CONFIG);
+  changed();toast('Configuration d\'origine restaurée');
+}
+
+// ── Export CSV ───────────────────────────────────────────────
 function exportCSV(){
   const rows=[['Semaine','Créneau','Date','Praticien','Compté au décompte']];
   result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
@@ -191,10 +458,17 @@ function exportCSV(){
   a.click();
 }
 
-renderStats();
-renderPlan();
-renderTotaux();
+function changed(){
+  saveConfig();
+  recompute();
+  renderIndispos();
+  renderMars();
+}
+
+recompute();
 renderIndispos();
+renderMars();
+try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
 </html>

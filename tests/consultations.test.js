@@ -85,3 +85,35 @@ test('décompte T4 équilibré entre titulaires (écart ≤ 1)', () => {
 test('génération déterministe', () => {
   assert.deepEqual(E.generate().weeks, result.weeks);
 });
+
+test('renommer un MAR conserve ses indisponibilités et le planning', () => {
+  const cfg = E.renameTitulaire(E.DEFAULT_CONFIG, 'SG', 'XY');
+  assert.deepEqual(E.DEFAULT_CONFIG.titulaires.map(t => t.code), ['RW', 'SG', 'GR'], 'config par défaut intacte');
+  const r = E.generate(cfg);
+  assert.deepEqual(E.verify(r), []);
+  r.weeks.forEach((w, i) => E.SLOTS.forEach(s => {
+    const before = result.weeks[i].slots[s.id].med;
+    assert.equal(w.slots[s.id].med, before === 'SG' ? 'XY' : before, `${w.monday} ${s.id}`);
+  }));
+});
+
+test('une indisponibilité ajoutée est prise en compte', () => {
+  const who = slot('2026-11-30', 'mar').med;
+  assert.ok(E.isTitulaire(who));
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.indispos[who].push('2026-12-01');
+  const r = E.generate(cfg);
+  assert.notEqual(r.weeks.find(w => w.monday === '2026-11-30').slots.mar.med, who);
+  assert.deepEqual(E.verify(r), []);
+});
+
+test('plafond personnalisé : un MAR à 3 / semaine', () => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.titulaires.forEach(t => { t.max = t.code === 'GR' ? 3 : 2; });
+  const r = E.generate(cfg);
+  assert.deepEqual(E.verify(r), []);
+  r.weeks.filter(w => !w.override).forEach(w => {
+    const n = E.SLOTS.filter(s => w.slots[s.id].med === 'RW').length;
+    assert.ok(n <= 2, w.monday);
+  });
+});
