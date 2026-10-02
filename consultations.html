@@ -176,7 +176,7 @@ td.l{text-align:left}
     <div class="legend">
       <span><span class="sw"></span> Colonnes orange : créneaux comptés au décompte</span>
       <span>📌 Praticien forcé manuellement</span>
-      <span>🩺 Présence requise (consultation libérale importée)</span>
+      <span>🩺 Patients libéraux importés et leur date de bloc</span>
       <span><b>Cliquer sur une case</b> pour forcer un praticien (ou revenir au calcul automatique)</span>
     </div>
     <div class="tbl-wrap"><table id="plan"></table></div>
@@ -209,24 +209,23 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Charger le fichier Excel des consultations libérales : pour chaque date d'examen, le médecin indiqué doit être présent et reçoit donc en priorité une consultation d'anesthésie ce jour-là. Colonnes attendues : <b>Date</b> et <b>Médecin</b> (initiales ou nom) ; les autres colonnes (examen, salle…) sont conservées pour information, sauf les colonnes d'identité patient (nom, date de naissance, IPP…) qui ne sont jamais enregistrées. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <p class="hint">Charger le fichier Excel des patients en consultation libérale : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>. Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère le patient : il doit être disponible à la date de bloc et n'a pas de consultation ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
     <label class="drop" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
       <div id="lib-src" style="margin-top:6px;font-size:12px"></div>
     </label>
-    <div id="lib-map"></div>
     <div class="card">
-      <b>Ajouter une date manuellement</b>
+      <b>Ajouter un patient manuellement</b>
       <div class="row">
-        <input type="date" id="lib-d" min="2026-09-28" max="2026-12-31"/>
-        <select id="lib-m"></select>
+        <label>Consultation <input type="date" id="lib-c" min="2026-09-28" max="2026-12-31"/></label>
+        <label>Bloc <input type="date" id="lib-b"/></label>
         <input type="text" id="lib-i" placeholder="Examen / commentaire (facultatif)" style="flex:1;min-width:160px"/>
         <button class="btn btn-g" onclick="libAddManual()">+ Ajouter</button>
       </div>
     </div>
     <div id="lib-sum"></div>
-    <div class="tbl-wrap"><table id="lib-tbl" style="min-width:620px"></table></div>
+    <div class="tbl-wrap"><table id="lib-tbl" style="min-width:680px"></table></div>
   </div>
 
   <!-- ── MAR ── -->
@@ -271,10 +270,16 @@ function loadConfig(){
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
       const saved = JSON.parse(raw);
-      if(validConfig(saved)) return Object.assign(clone(E.DEFAULT_CONFIG), saved);
+      if(validConfig(saved)) return cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG), saved));
     }
   }catch(e){}
   return clone(E.DEFAULT_CONFIG);
+}
+function cleanCfg(c){
+  const ok=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d);
+  c.liberales=(Array.isArray(c.liberales)?c.liberales:[]).filter(l=>l&&ok(l.consult)&&ok(l.bloc));
+  delete c.libRows; delete c.aliases; // ancien format (colonne médecin)
+  return c;
 }
 function validConfig(c){
   return c && Array.isArray(c.titulaires) && c.titulaires.length===3
@@ -283,7 +288,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, libRows:cfg.libRows||[], aliases:cfg.aliases||{}};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[]};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -316,7 +321,6 @@ function showTab(id){
 
 // ── Planning ─────────────────────────────────────────────────
 function recompute(){
-  cfg.presences = libPresences();
   result = E.generate(cfg);
   renderStats(); renderForces(); renderPlan(); renderTotaux(); renderRules();
 }
@@ -427,10 +431,10 @@ function renderPlan(){
       const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
       const tip=ex?`Exclus le ${E.labelFR(c.date)} :\n${ex}`:`Tous les titulaires disponibles le ${E.labelFR(c.date)}`;
       const ftip=c.force?`\n📌 Forcé manuellement — cliquer pour modifier`:`\nCliquer pour forcer un praticien`;
-      const pm=result.config.presenceMap[c.date];
-      const pres=c.med&&pm&&pm.has(c.med);
-      const ptip=pres?`\n🩺 ${c.med} : consultation libérale ce jour-là (présence requise)`:'';
-      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?'<span class="pres">🩺 libérale</span>':''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
+      const nb=(c.blocs||[]).length?(cfg.liberales||[]).filter(l=>l.consult===c.date&&l.bloc>l.consult).length:0;
+      const pres=nb>0;
+      const ptip=pres?`\n🩺 ${nb} patient(s) libéral(aux) — bloc le ${c.blocs.map(E.labelFR).join(', ')}`:'';
+      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺 ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span>`:''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
     });
     h+='</tr>';
   });
@@ -591,7 +595,7 @@ function importConfig(input){
     try{
       const c=JSON.parse(rd.result);
       if(!validConfig(c)) throw new Error('format');
-      cfg=Object.assign(clone(E.DEFAULT_CONFIG),c);
+      cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),c));
       changed();toast('✅ Configuration importée');
     }catch(e){toast('⚠️ Fichier invalide');}
     input.value='';
@@ -600,7 +604,7 @@ function importConfig(input){
 }
 function resetConfig(){
   if(!confirm('Revenir aux MAR et indisponibilités d\'origine ? Les modifications seront perdues.')) return;
-  const lib={libRows:cfg.libRows,aliases:cfg.aliases};
+  const lib={liberales:cfg.liberales};
   cfg=Object.assign(clone(E.DEFAULT_CONFIG),lib); // consultations libérales conservées
   changed();toast('Configuration d\'origine restaurée');
 }
@@ -628,33 +632,7 @@ function changed(){
 }
 
 // ── Consultations libérales (import Excel) ──────────────────
-// cfg.libRows : [{date, nom, info, manuel}] ; cfg.aliases : {NOM: code | ''}
-function normNom(v){
-  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()
-    .replace(/\bDR\b\.?|\bDOCTEUR\b|\bPR\b\.?/g,' ').replace(/[^A-Z0-9 -]/g,' ').replace(/\s+/g,' ').trim();
-}
-function resolveNom(nom){
-  const n=normNom(nom);
-  if(!n) return {code:null,ignore:true};
-  const cs=codes();
-  if(cs.includes(n)) return {code:n};
-  const al=cfg.aliases||{};
-  if(Object.prototype.hasOwnProperty.call(al,n)) return al[n]?{code:al[n]}:{code:null,ignore:true};
-  return {code:null};
-}
-function suggestCode(nom){
-  const words=normNom(nom).split(/[ -]+/).filter(Boolean);
-  const ini=words.map(w=>w[0]).join('');
-  return codes().find(c=>c===ini||c===ini.split('').reverse().join(''))||'';
-}
-function libPresences(){
-  const out=[];
-  (cfg.libRows||[]).forEach(r=>{
-    const res=resolveNom(r.nom);
-    if(res.code&&codes().includes(res.code)) out.push({date:r.date,med:res.code,info:r.info||''});
-  });
-  return out;
-}
+// cfg.liberales : [{consult, bloc, info, manuel}]
 function cellToISO(v){
   if(v instanceof Date&&!isNaN(v)) return iso(v.getFullYear(),v.getMonth()+1,v.getDate());
   if(typeof v==='number'&&v>20000&&v<80000){ // numéro de série Excel
@@ -670,45 +648,33 @@ function cellToISO(v){
 function parseRows(rows){
   rows=rows.filter(r=>r&&r.some(v=>String(v).trim()!==''));
   if(!rows.length) return {error:'Le fichier est vide.'};
-  const isDateH=v=>/date|jour/i.test(String(v));
-  const isMedH=v=>/m[ée]decin|praticien|\bmar\b|docteur|^dr\b|anesth|op[ée]rateur|nom/i.test(String(v));
-  let hi=rows.slice(0,10).findIndex(r=>r.some(isDateH));
-  let dc=-1, mc=-1, headers=[];
-  if(hi>=0){
-    headers=rows[hi].map(v=>String(v).trim());
-    dc=headers.findIndex(isDateH);
-    mc=headers.findIndex((v,i)=>i!==dc&&isMedH(v));
-  }
+  const isConsH=v=>/consult/i.test(String(v));
+  const isBlocH=v=>/bloc|op[ée]r|interv|chir|examen.*date|date.*examen|endoscop/i.test(String(v));
+  // Ligne d'en-tête : la première qui contient « date », « consult » ou « bloc »
+  const hi=rows.slice(0,10).findIndex(r=>r.some(v=>/date|consult|bloc/i.test(String(v))&&!cellToISO(v)));
+  const headers=hi>=0?rows[hi].map(v=>String(v).trim()):[];
   const data=rows.slice(hi+1);
   const width=Math.max(...data.map(r=>r.length),headers.length);
-  if(dc<0){ // pas d'en-tête : colonne contenant le plus de dates
-    let best=0;
-    for(let i=0;i<width;i++){const n=data.filter(r=>cellToISO(r[i])).length;if(n>best){best=n;dc=i;}}
+  // Colonnes contenant majoritairement des dates
+  const dateCols=[];
+  for(let i=0;i<width;i++){
+    const n=data.filter(r=>cellToISO(r[i])).length;
+    if(n>0&&n>=data.length/2) dateCols.push(i);
   }
-  if(mc<0){ // colonne texte la plus courte en moyenne (initiales) hors date
-    let best=Infinity;
-    for(let i=0;i<width;i++){
-      if(i===dc) continue;
-      const vals=data.map(r=>String(r[i]??'').trim()).filter(Boolean);
-      if(vals.length<data.length/2||vals.every(v=>cellToISO(v))) continue;
-      const avg=vals.reduce((a,v)=>a+v.length,0)/vals.length;
-      if(avg<best){best=avg;mc=i;}
-    }
-  }
-  if(dc<0) return {error:'Aucune colonne de dates trouvée.'};
-  if(mc<0) return {error:'Aucune colonne « Médecin » trouvée.'};
+  let cc=headers.findIndex(isConsH), bc=headers.findIndex((v,i)=>i!==cc&&isBlocH(v));
+  if(cc<0) cc=dateCols.find(i=>i!==bc)??-1;
+  if(bc<0) bc=dateCols.find(i=>i!==cc)??-1;
+  if(cc<0||bc<0) return {error:'Il faut deux colonnes de dates : date de consultation et date de bloc.'};
   // Colonnes d'identité patient : non conservées (données de santé)
-  const privee=headers.map(h=>/patient|naissance|\bddn\b|\bipp\b|t[ée]l[ée]phone|adresse|s[ée]cu|pr[ée]nom/i.test(h));
+  const privee=headers.map(h=>/patient|\bnom\b|naissance|\bddn\b|\bipp\b|t[ée]l[ée]phone|adresse|s[ée]cu|pr[ée]nom/i.test(h));
   const out=[]; let bad=0;
   data.forEach(r=>{
-    const d=cellToISO(r[dc]);
-    const nomCell=String(r[mc]??'').trim();
-    if(!d||!nomCell){if(String(r[dc]??'').trim()||nomCell)bad++;return;}
-    const info=r.map((v,i)=>i===dc||i===mc||privee[i]||String(v??'').trim()===''?null:(headers[i]?headers[i]+' : ':'')+String(v).trim()).filter(Boolean).join(' · ');
-    // plusieurs médecins dans une même case : "RW / SG", "RW et SG"…
-    nomCell.split(/\s*(?:\/|,|;|\+|&|\bet\b)\s*/i).filter(Boolean).forEach(nom=>out.push({date:d,nom,info}));
+    const c=cellToISO(r[cc]), b=cellToISO(r[bc]);
+    if(!c||!b){if(String(r[cc]??'').trim()||String(r[bc]??'').trim())bad++;return;}
+    const info=r.map((v,i)=>i===cc||i===bc||privee[i]||String(v??'').trim()===''?null:(headers[i]?headers[i]+' : ':'')+String(v).trim()).filter(Boolean).join(' · ');
+    out.push({consult:c,bloc:b,info});
   });
-  return {rows:out,bad,dateCol:headers[dc]||`colonne ${dc+1}`,medCol:headers[mc]||`colonne ${mc+1}`};
+  return {rows:out,bad,consCol:headers[cc]||`colonne ${cc+1}`,blocCol:headers[bc]||`colonne ${bc+1}`};
 }
 function libFile(f){
   if(!f) return;
@@ -722,94 +688,61 @@ function libFile(f){
       parsed=parseRows(XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''}));
     }catch(e){parsed={error:'Fichier illisible ('+e.message+').'};}
     if(parsed.error){toast('⚠️ '+parsed.error);document.getElementById('lib-src').textContent='⚠️ '+parsed.error;return;}
-    if(!parsed.rows.length){toast('⚠️ Aucune ligne date + médecin trouvée');return;}
-    const anciens=(cfg.libRows||[]).filter(r=>!r.manuel);
-    if(anciens.length&&!confirm(`Remplacer les ${anciens.length} ligne(s) importée(s) précédemment ? (les ajouts manuels sont conservés)`)) return;
-    cfg.libRows=(cfg.libRows||[]).filter(r=>r.manuel).concat(parsed.rows);
-    cfg.libSource=`${f.name} — ${parsed.rows.length} ligne(s) · dates : « ${parsed.dateCol} » · médecin : « ${parsed.medCol} »${parsed.bad?` · ${parsed.bad} ligne(s) ignorée(s) (date ou médecin illisible)`:''}`;
+    if(!parsed.rows.length){toast('⚠️ Aucune ligne avec les deux dates');return;}
+    const anciens=(cfg.liberales||[]).filter(r=>!r.manuel);
+    if(anciens.length&&!confirm(`Remplacer les ${anciens.length} patient(s) importé(s) précédemment ? (les ajouts manuels sont conservés)`)) return;
+    cfg.liberales=(cfg.liberales||[]).filter(r=>r.manuel).concat(parsed.rows);
+    cfg.libSource=`${f.name} — ${parsed.rows.length} patient(s) · consultation : « ${parsed.consCol} » · bloc : « ${parsed.blocCol} »${parsed.bad?` · ${parsed.bad} ligne(s) ignorée(s) (date illisible)`:''}`;
     try{localStorage.setItem(STORE_KEY+'_libsrc',cfg.libSource);}catch(e){}
     changed();
-    toast(`✅ ${parsed.rows.length} ligne(s) importée(s)`);
+    toast(`✅ ${parsed.rows.length} patient(s) importé(s)`);
   };
   rd.readAsArrayBuffer(f);
 }
 function libAddManual(){
-  const d=document.getElementById('lib-d').value, m=document.getElementById('lib-m').value;
-  if(!d){toast('Choisir une date');return;}
-  cfg.libRows=(cfg.libRows||[]).concat([{date:d,nom:m,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
+  const c=document.getElementById('lib-c').value, b=document.getElementById('lib-b').value;
+  if(!c||!b){toast('Saisir la date de consultation et la date de bloc');return;}
+  cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
   document.getElementById('lib-i').value='';
-  changed();toast(`${m} : présence requise le ${E.labelFR(d)}`);
+  changed();toast(`Patient ajouté : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
 }
-function libDel(i){cfg.libRows.splice(i,1);changed();}
+function libDel(i){cfg.liberales.splice(i,1);changed();}
 function libClear(){
-  if(!confirm('Effacer toutes les consultations libérales ?')) return;
-  cfg.libRows=[];cfg.libSource='';
+  if(!confirm('Effacer tous les patients libéraux ?')) return;
+  cfg.liberales=[];cfg.libSource='';
   try{localStorage.removeItem(STORE_KEY+'_libsrc');}catch(e){}
   changed();
 }
-function setAlias(nom,code){
-  cfg.aliases=Object.assign({},cfg.aliases,{[normNom(nom)]:code});
-  changed();
-}
+function jourCourt(d){return new Date(d+'T00:00:00Z').toLocaleDateString('fr-FR',{weekday:'short',timeZone:'UTC'});}
 function renderLib(){
-  document.getElementById('lib-m').innerHTML=codes().map(c=>`<option>${esc(c)}</option>`).join('');
   try{if(!cfg.libSource)cfg.libSource=localStorage.getItem(STORE_KEY+'_libsrc')||'';}catch(e){}
   document.getElementById('lib-src').textContent=cfg.libSource||'';
-  const rows=cfg.libRows||[];
-
-  // Noms non reconnus → association à un MAR
-  const inconnus=[...new Set(rows.filter(r=>{const x=resolveNom(r.nom);return !x.code&&!x.ignore;}).map(r=>normNom(r.nom)))];
-  const al=cfg.aliases||{};
-  const assoc=Object.entries(al);
-  let mh='';
-  if(inconnus.length){
-    mh+=`<div class="ok bad" style="color:var(--text)"><b style="color:var(--red)">⚠️ ${inconnus.length} médecin(s) non reconnu(s)</b> — associer chaque nom à un MAR (ou l'ignorer s'il n'est pas concerné) :`;
-    inconnus.forEach(n=>{
-      const sug=suggestCode(n);
-      mh+=`<div class="row" style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><b style="min-width:140px">${esc(n)}</b>
-        <select id="al-${esc(n)}">${codes().map(c=>`<option value="${esc(c)}"${c===sug?' selected':''}>${esc(c)}</option>`).join('')}</select>
-        <button class="btn btn-g" onclick="setAlias(this.dataset.n,document.getElementById('al-'+this.dataset.n).value)" data-n="${esc(n)}">Associer</button>
-        <button class="btn" onclick="setAlias(this.dataset.n,'')" data-n="${esc(n)}">Ignorer</button></div>`;
-    });
-    mh+='</div>';
-  }
-  if(assoc.length){
-    mh+=`<div class="card"><b>Correspondances enregistrées</b><div class="row">${assoc.map(([n,c])=>`<span class="tag" style="background:var(--bg);color:var(--text)">${esc(n)} → ${c?esc(c):'<i>ignoré</i>'}<button title="Supprimer" onclick="delAlias(this.dataset.n)" data-n="${esc(n)}">×</button></span>`).join('')}</div></div>`;
-  }
-  document.getElementById('lib-map').innerHTML=mh;
-
-  // Tableau
-  const st=E.presenceStatus(result);
-  const stKey={}; st.forEach(p=>{(stKey[p.date+'|'+p.med]=p);});
-  const idx=rows.map((r,i)=>i).sort((a,b)=>rows[a].date<rows[b].date?-1:rows[a].date>rows[b].date?1:a-b);
+  const rows=cfg.liberales||[];
+  const st=E.liberaleStatus(result);
+  const idx=rows.map((r,i)=>i).sort((a,b)=>(rows[a].consult+rows[a].bloc).localeCompare(rows[b].consult+rows[b].bloc)||a-b);
   let ok=0,ko=0,off=0;
-  let h=`<thead><tr><th class="l">Date</th><th>Médecin (fichier)</th><th>MAR</th><th class="l">Examen / infos</th><th class="l">Consultation d'anesthésie</th><th></th></tr></thead><tbody>`;
+  let h=`<thead><tr><th class="l">Consultation</th><th class="l">Bloc</th><th>Créneau</th><th>MAR</th><th class="l">Examen / infos</th><th class="l">Contrôle</th><th></th></tr></thead><tbody>`;
   idx.forEach(i=>{
-    const r=rows[i], res=resolveNom(r.nom);
-    const jour=new Date(r.date+'T00:00:00Z').toLocaleDateString('fr-FR',{weekday:'short',timeZone:'UTC'});
+    const r=rows[i], x=st[i];
     let stat;
-    if(!res.code){stat=res.ignore?'<span class="st-off">Ignoré</span>':'<span class="st-warn">Médecin non reconnu</span>';res.ignore?off++:ko++;}
-    else{
-      const p=stKey[r.date+'|'+res.code];
-      if(p&&p.slot){stat=`<span class="st-ok">✅ ${esc(p.slot.label)}</span>`;ok++;}
-      else if(p&&/^(pas de consultation|hors période)/.test(p.raison)){stat=`<span class="st-off">${esc(p.raison)}</span>`;off++;}
-      else{stat=`<span class="st-warn">⚠️ Non assurée — ${esc(p?p.raison:'')}</span>`;ko++;}
-    }
-    h+=`<tr><td class="l" style="white-space:nowrap"><b>${E.labelFR(r.date)}</b>/${r.date.slice(0,4)} <span style="color:var(--t3)">${esc(jour)}</span></td>
-      <td>${esc(r.nom)}${r.manuel?' <small style="color:var(--t3)">(manuel)</small>':''}</td><td>${res.code?chip(res.code):'—'}</td>
+    if(x.statut==='ok'){stat=`<span class="st-ok">✅ ${esc(x.raison)}</span>`;ok++;}
+    else if(x.statut==='alerte'){stat=`<span class="st-warn">⚠️ ${esc(x.raison)}</span>`;ko++;}
+    else{stat=`<span class="st-off">${esc(x.raison)}</span>`;off++;}
+    h+=`<tr><td class="l" style="white-space:nowrap"><b>${E.labelFR(r.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(r.consult))}</span>${r.manuel?' <small style="color:var(--t3)">(manuel)</small>':''}</td>
+      <td class="l" style="white-space:nowrap"><b>${E.labelFR(r.bloc)}</b> <span style="color:var(--t3)">${esc(jourCourt(r.bloc))}</span></td>
+      <td>${x.slot?esc(x.slot.label):'—'}</td><td>${x.med?chip(x.med):'—'}</td>
       <td class="l" style="font-size:11px;color:var(--t2)">${esc(r.info||'')}</td><td class="l">${stat}</td>
       <td><button class="del" title="Supprimer" onclick="libDel(${i})">×</button></td></tr>`;
   });
-  if(!rows.length) h+=`<tr><td colspan="6" style="color:var(--t3);padding:14px">Aucune consultation libérale chargée.</td></tr>`;
+  if(!rows.length) h+=`<tr><td colspan="7" style="color:var(--t3);padding:14px">Aucun patient libéral chargé.</td></tr>`;
   document.getElementById('lib-tbl').innerHTML=h+'</tbody>';
   document.getElementById('lib-sum').innerHTML=rows.length?`<div class="stats">
-    <div class="stat"><div class="stat-l">Lignes</div><div class="stat-v">${rows.length}</div></div>
-    <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">Présence assurée</div><div class="stat-v">${ok}</div></div>
-    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À traiter</div><div class="stat-v">${ko}</div><div class="stat-s">non assurée ou médecin inconnu</div></div>
-    <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, hors période, ignoré</div></div>
+    <div class="stat"><div class="stat-l">Patients</div><div class="stat-v">${rows.length}</div></div>
+    <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">MAR disponible au bloc</div><div class="stat-v">${ok}</div></div>
+    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, MAR absent, date incohérente</div></div>
+    <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
   </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r" onclick="libClear()">Effacer tout</button></div>`:'';
 }
-function delAlias(n){const a=Object.assign({},cfg.aliases);delete a[n];cfg.aliases=a;changed();}
 (function(){
   const dz=document.getElementById('drop');
   ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));

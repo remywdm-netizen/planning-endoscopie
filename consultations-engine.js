@@ -27,6 +27,9 @@
     jeu1: { offset: 5, cible: 'Mardi suivant' },  // jeudi-C1 → mardi suivant
   };
 
+  // Créneau de consultation libérale selon le jour (0 = lundi … 3 = jeudi).
+  const SLOT_LIBERALE = { 0: 'lun1', 1: 'mar', 2: 'mer', 3: 'jeu1' };
+
   function days(month, list) {
     return list.map(d => `2026-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
   }
@@ -64,10 +67,11 @@
         ...days(12, [11, 28, 29, 30, 31]),
       ],
     },
-    // Présences requises (consultations libérales importées) :
-    // [{ date: 'AAAA-MM-JJ', med: 'RW', info: '…' }]. Le MAR doit avoir
-    // une consultation ce jour-là ; priorité sur l'équilibrage.
-    presences: [],
+    // Patients libéraux importés : [{ consult: 'AAAA-MM-JJ', bloc: 'AAAA-MM-JJ', info }].
+    // Le MAR de la consultation libérale du jour (voir SLOT_LIBERALE) opère
+    // le patient : il doit être disponible à la date de bloc et ne peut pas
+    // être en consultation ce jour-là.
+    liberales: [],
     // Praticiens forcés, indexés par le lundi de la semaine puis par créneau.
     // Un créneau forcé n'est pas recalculé ; les autres s'adaptent autour.
     // (La semaine du 28/09 est entièrement forcée : semaine de référence.)
@@ -92,17 +96,21 @@
     const [, m, d] = iso.split('-');
     return `${d}/${m}`;
   }
+  function dowOf(iso) { return (parseISO(iso).getUTCDay() + 6) % 7; } // lundi = 0
 
   function resolveConfig(userConfig) {
     const cfg = Object.assign({}, DEFAULT_CONFIG, userConfig || {});
     cfg.codes = cfg.titulaires.map(t => t.code);
     cfg.maxOf = {};
     cfg.titulaires.forEach(t => { cfg.maxOf[t.code] = t.max || cfg.cap; });
-    cfg.presenceMap = {};
-    (cfg.presences || []).forEach(p => {
-      if (!cfg.codes.includes(p.med)) return;
-      (cfg.presenceMap[p.date] = cfg.presenceMap[p.date] || new Set()).add(p.med);
+    // date de consultation → dates de bloc (postérieures) de ses patients
+    cfg.libMap = {};
+    (cfg.liberales || []).forEach(l => {
+      if (!l || !l.consult || !l.bloc || l.bloc <= l.consult) return;
+      const set = (cfg.libMap[l.consult] = cfg.libMap[l.consult] || []);
+      if (!set.includes(l.bloc)) set.push(l.bloc);
     });
+    Object.values(cfg.libMap).forEach(a => a.sort());
     return cfg;
   }
 
@@ -118,7 +126,6 @@
     Object.values(cfg.overrides || {}).forEach(ov => {
       Object.keys(ov).forEach(k => { if (ov[k] === oldCode) ov[k] = newCode; });
     });
-    (cfg.presences || []).forEach(p => { if (p.med === oldCode) p.med = newCode; });
     return cfg;
   }
 
@@ -144,10 +151,13 @@
         const date = addDays(monday, s.dow);
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
         info.force = !info.ferie && !info.horsPeriode && forces[s.id] ? forces[s.id] : null;
+        info.blocs = SLOT_LIBERALE[s.dow] === s.id ? (cfg.libMap[date] || []) : [];
         info.exclus = {};
         codes.forEach(t => {
+          const absent = info.blocs.find(b => indispo[t].has(b));
           if (indispo[t].has(date)) info.exclus[t] = 'Indisponible';
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
+          else if (absent) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc d'un patient libéral)`;
         });
         return info;
       });
@@ -164,6 +174,7 @@
           ferie: c.ferie,
           horsPeriode: c.horsPeriode,
           exclus: c.exclus,
+          blocs: c.blocs,
           force: !!c.force,
           override: week.override,
         };
@@ -175,6 +186,11 @@
           if (!blocked[target]) blocked[target] = new Map();
           blocked[target].set(who, `Au bloc (report ${c.slot.label} du ${labelFR(c.date)})`);
         }
+        // Bloc des patients libéraux vus ce jour-là
+        if (isTit(who)) c.blocs.forEach(b => {
+          if (!blocked[b]) blocked[b] = new Map();
+          blocked[b].set(who, `Au bloc (patient libéral vu le ${labelFR(c.date)})`);
+        });
       });
       weeks.push(week);
     }
@@ -201,6 +217,7 @@
     const iJeu1 = ctx.findIndex(c => c.slot.id === 'jeu1');
     // Valeur connue d'un créneau : forcé, ou déjà choisi dans la récursion
     const known = (j, i) => (ctx[j].force ? ctx[j].force : (j < i ? cur[j] : undefined));
+    const blocSet = ctx.map(c => new Set(c.blocs));
 
     (function rec(i) {
       if (i === ctx.length) {
@@ -226,6 +243,12 @@
           // Exclusivité : pas mardi ET jeudi-C1 la même semaine
           if (i === iJeu1 && known(iMar, i) === who) continue;
           if (i === iMar && known(iJeu1, i) === who) continue;
+          // Au bloc pour un patient libéral vu plus tôt dans la semaine (ou l'inverse)
+          let bloc = false;
+          for (let j = 0; j < ctx.length; j++) {
+            if (j !== i && known(j, i) === who && (blocSet[j].has(ctx[i].date) || blocSet[i].has(ctx[j].date))) bloc = true;
+          }
+          if (bloc) continue;
         }
         cur[i] = who;
         if (tit) load[who]++;
@@ -263,19 +286,7 @@
       const v = [1, 2, 3].reduce((a, p) => a + cum[t][p] + add[t][p], 0);
       return acc + v * v;
     }, 0);
-    // Présences requises non assurées (consultations libérales)
-    let absents = 0;
-    const vus = new Set();
-    ctx.forEach(c => {
-      const req = cfg.presenceMap[c.date];
-      if (!req || vus.has(c.date)) return;
-      vus.add(c.date);
-      req.forEach(t => {
-        if (!ctx.some((x, j) => x.date === c.date && cur[j] === t)) absents++;
-      });
-    });
     return [
-      absents,
       autre[1], bal(1),
       autre[2] + autre[3],
       depassement,
@@ -336,9 +347,16 @@
 
     const byDate = {};
     weeks.forEach(w => SLOTS.forEach(s => { const c = w.slots[s.id]; (byDate[c.date] = byDate[c.date] || []).push(c); }));
-    presenceStatus(result).forEach(p => {
-      if (!p.slot && !p.raison.startsWith('pas de consultation') && p.raison !== 'hors période') add(`${labelFR(p.date)} : présence de ${p.med} requise (consult. libérale) non assurée — ${p.raison}`, { force: true });
-    });
+    // Patients libéraux : le MAR de la consultation doit être libre le jour du bloc
+    weeks.forEach(w => SLOTS.forEach(s => {
+      const c = w.slots[s.id];
+      if (!isTit(c.med)) return;
+      (c.blocs || []).forEach(b => {
+        if (indispo[c.med].has(b)) add(`${labelFR(c.date)} ${s.label} : ${c.med} voit des patients libéraux opérés le ${labelFR(b)} mais est indisponible ce jour-là`, c);
+        (byDate[b] || []).filter(x => x.med === c.med).forEach(x =>
+          add(`${labelFR(b)} : ${c.med} en consultation alors qu'il est au bloc (patient libéral vu le ${labelFR(c.date)})`, c, x));
+      });
+    }));
 
     weeks.forEach(w => {
       const cellsOf = {};
@@ -376,32 +394,42 @@
         const other = id === 'mar' ? sl.jeu1.med : sl.mar.med;
         const eligibles = codes.filter(t => !c.exclus[t] && t !== other
           && (cellsOf[t] || []).length < cfg.maxOf[t]
-          && !(cellsOf[t] || []).some(x => x.date === c.date));
+          && !(cellsOf[t] || []).some(x => x.date === c.date)
+          && !(c.blocs || []).some(b => (byDate[b] || []).some(x => x.med === t))
+          && !Object.values(sl).some(x => x.med === t && (x.blocs || []).includes(c.date)));
         if (eligibles.length) add(`${labelFR(c.date)} ${id} : Autre MAR alors que ${eligibles.join(', ')} éligible(s)`, c);
       });
     });
     return issues;
   }
-  // État de chaque présence requise : créneau attribué ou raison de l'échec.
-  function presenceStatus(result) {
+  // État de chaque patient libéral importé : créneau, MAR et contrôle du bloc.
+  // statut : 'ok' | 'alerte' (à vérifier) | 'hors' (sans objet)
+  function liberaleStatus(result) {
     const { config: cfg, weeks } = result;
+    const isTit = m => cfg.codes.includes(m);
+    const indispo = {};
+    cfg.codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
     const cells = {};
     weeks.forEach(w => SLOTS.forEach(s => {
       const c = w.slots[s.id];
       (cells[c.date] = cells[c.date] || []).push(Object.assign({ slot: s }, c));
     }));
-    return (cfg.presences || []).map(p => {
-      const res = Object.assign({}, p, { slot: null, raison: '' });
-      const day = cells[p.date];
-      if (!cfg.codes.includes(p.med)) res.raison = 'MAR inconnu';
-      else if (!day) res.raison = p.date >= cfg.start && p.date <= cfg.end ? 'pas de consultation ce jour-là' : 'hors période';
-      else if (day[0].ferie) res.raison = `férié (${day[0].ferie})`;
-      else {
-        const hit = day.find(c => c.med === p.med);
-        if (hit) res.slot = hit.slot;
-        else if (day[0].exclus[p.med]) res.raison = day[0].exclus[p.med].toLowerCase();
-        else res.raison = 'plafond ou règles de la semaine';
-      }
+    return (cfg.liberales || []).map(l => {
+      const res = Object.assign({}, l, { slot: null, med: null, statut: 'hors', raison: '' });
+      const day = cells[l.consult];
+      if (l.consult < cfg.start || l.consult > cfg.end) { res.raison = 'consultation hors période'; return res; }
+      if (!day) { res.raison = 'pas de consultation d\'anesthésie ce jour-là'; return res; }
+      if (day[0].ferie) { res.raison = `jour férié (${day[0].ferie})`; return res; }
+      const c = day.find(x => x.slot.id === SLOT_LIBERALE[x.slot.dow]);
+      res.slot = c.slot;
+      res.med = c.med;
+      if (l.bloc <= l.consult) { res.statut = 'alerte'; res.raison = 'date de bloc antérieure ou égale à la consultation'; return res; }
+      if (!isTit(c.med)) { res.statut = 'alerte'; res.raison = `${c.med || 'personne'} en consultation : vérifier sa présence au bloc le ${labelFR(l.bloc)}`; return res; }
+      if (indispo[c.med].has(l.bloc)) { res.statut = 'alerte'; res.raison = `${c.med} indisponible le ${labelFR(l.bloc)}`; return res; }
+      const conflit = (cells[l.bloc] || []).find(x => x.med === c.med);
+      if (conflit) { res.statut = 'alerte'; res.raison = `${c.med} en consultation (${conflit.slot.label}) le ${labelFR(l.bloc)}`; return res; }
+      res.statut = 'ok';
+      res.raison = `${c.med} au bloc le ${labelFR(l.bloc)}`;
       return res;
     });
   }
@@ -412,8 +440,8 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, SLOTS, REPORT_BLOC, DEFAULT_CONFIG,
-    generate, verify, alertes, presenceStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
+    TITULAIRES, AUTRE, SLOTS, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
