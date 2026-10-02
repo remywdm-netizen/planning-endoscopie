@@ -64,6 +64,10 @@
         ...days(12, [11, 28, 29, 30, 31]),
       ],
     },
+    // Présences requises (consultations libérales importées) :
+    // [{ date: 'AAAA-MM-JJ', med: 'RW', info: '…' }]. Le MAR doit avoir
+    // une consultation ce jour-là ; priorité sur l'équilibrage.
+    presences: [],
     // Praticiens forcés, indexés par le lundi de la semaine puis par créneau.
     // Un créneau forcé n'est pas recalculé ; les autres s'adaptent autour.
     // (La semaine du 28/09 est entièrement forcée : semaine de référence.)
@@ -94,6 +98,11 @@
     cfg.codes = cfg.titulaires.map(t => t.code);
     cfg.maxOf = {};
     cfg.titulaires.forEach(t => { cfg.maxOf[t.code] = t.max || cfg.cap; });
+    cfg.presenceMap = {};
+    (cfg.presences || []).forEach(p => {
+      if (!cfg.codes.includes(p.med)) return;
+      (cfg.presenceMap[p.date] = cfg.presenceMap[p.date] || new Set()).add(p.med);
+    });
     return cfg;
   }
 
@@ -109,6 +118,7 @@
     Object.values(cfg.overrides || {}).forEach(ov => {
       Object.keys(ov).forEach(k => { if (ov[k] === oldCode) ov[k] = newCode; });
     });
+    (cfg.presences || []).forEach(p => { if (p.med === oldCode) p.med = newCode; });
     return cfg;
   }
 
@@ -253,7 +263,19 @@
       const v = [1, 2, 3].reduce((a, p) => a + cum[t][p] + add[t][p], 0);
       return acc + v * v;
     }, 0);
+    // Présences requises non assurées (consultations libérales)
+    let absents = 0;
+    const vus = new Set();
+    ctx.forEach(c => {
+      const req = cfg.presenceMap[c.date];
+      if (!req || vus.has(c.date)) return;
+      vus.add(c.date);
+      req.forEach(t => {
+        if (!ctx.some((x, j) => x.date === c.date && cur[j] === t)) absents++;
+      });
+    });
     return [
+      absents,
       autre[1], bal(1),
       autre[2] + autre[3],
       depassement,
@@ -312,6 +334,12 @@
     codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
     const blocked = {};
 
+    const byDate = {};
+    weeks.forEach(w => SLOTS.forEach(s => { const c = w.slots[s.id]; (byDate[c.date] = byDate[c.date] || []).push(c); }));
+    presenceStatus(result).forEach(p => {
+      if (!p.slot && !p.raison.startsWith('pas de consultation') && p.raison !== 'hors période') add(`${labelFR(p.date)} : présence de ${p.med} requise (consult. libérale) non assurée — ${p.raison}`, { force: true });
+    });
+
     weeks.forEach(w => {
       const cellsOf = {};
       SLOTS.forEach(s => {
@@ -354,6 +382,30 @@
     });
     return issues;
   }
+  // État de chaque présence requise : créneau attribué ou raison de l'échec.
+  function presenceStatus(result) {
+    const { config: cfg, weeks } = result;
+    const cells = {};
+    weeks.forEach(w => SLOTS.forEach(s => {
+      const c = w.slots[s.id];
+      (cells[c.date] = cells[c.date] || []).push(Object.assign({ slot: s }, c));
+    }));
+    return (cfg.presences || []).map(p => {
+      const res = Object.assign({}, p, { slot: null, raison: '' });
+      const day = cells[p.date];
+      if (!cfg.codes.includes(p.med)) res.raison = 'MAR inconnu';
+      else if (!day) res.raison = p.date >= cfg.start && p.date <= cfg.end ? 'pas de consultation ce jour-là' : 'hors période';
+      else if (day[0].ferie) res.raison = `férié (${day[0].ferie})`;
+      else {
+        const hit = day.find(c => c.med === p.med);
+        if (hit) res.slot = hit.slot;
+        else if (day[0].exclus[p.med]) res.raison = day[0].exclus[p.med].toLowerCase();
+        else res.raison = 'plafond ou règles de la semaine';
+      }
+      return res;
+    });
+  }
+
   // Règles non respectées par le calcul automatique (doit être vide).
   function verify(result) { return check(result).filter(i => !i.force).map(i => i.msg); }
   // Écarts aux règles causés par un praticien forcé manuellement.
@@ -361,7 +413,7 @@
 
   const api = {
     TITULAIRES, AUTRE, SLOTS, REPORT_BLOC, DEFAULT_CONFIG,
-    generate, verify, alertes, decompte, totaux, addDays, labelFR, renameTitulaire,
+    generate, verify, alertes, presenceStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -163,3 +163,44 @@ test('un forçage sur un jour férié est ignoré', () => {
   const r = withForce('2026-11-16', 'jeu1', 'RW');
   assert.equal(r.weeks.find(x => x.monday === '2026-11-16').slots.jeu1.med, null);
 });
+
+const withPresences = presences => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.presences = presences;
+  return E.generate(cfg);
+};
+
+test('présence requise : le MAR obtient une consultation ce jour-là', () => {
+  // Sans contrainte, RW n'a pas de consultation le mercredi 02/12
+  const jour = '2026-12-02';
+  const avant = E.SLOTS.filter(s => s.dow === 2).map(s => slot('2026-11-30', s.id).med);
+  assert.ok(!avant.includes('RW'));
+  const r = withPresences([{ date: jour, med: 'RW', info: 'Coloscopie' }]);
+  const w = r.weeks.find(x => x.monday === '2026-11-30');
+  assert.equal(w.slots.mer.med, 'RW');
+  assert.deepEqual(E.verify(r), []);
+  const st = E.presenceStatus(r);
+  assert.equal(st[0].slot.id, 'mer');
+  assert.deepEqual(E.alertes(r), []);
+});
+
+test('présence impossible (MAR indisponible) : alerte', () => {
+  const r = withPresences([{ date: '2026-10-05', med: 'RW' }]); // RW indispo le 05/10
+  assert.deepEqual(E.verify(r), []);
+  assert.ok(E.alertes(r).some(a => /présence de RW/.test(a) && /indisponible/.test(a)));
+});
+
+test('présence un vendredi ou hors période : ignorée sans alerte', () => {
+  const r = withPresences([{ date: '2026-10-09', med: 'SG' }, { date: '2027-01-05', med: 'SG' }]);
+  const st = E.presenceStatus(r);
+  assert.equal(st[0].raison, 'pas de consultation ce jour-là');
+  assert.equal(st[1].raison, 'hors période');
+  assert.deepEqual(E.alertes(r), []);
+});
+
+test('renommer un MAR reporte ses présences requises', () => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.presences = [{ date: '2026-12-02', med: 'RW' }];
+  const r = E.generate(E.renameTitulaire(cfg, 'RW', 'ZZ'));
+  assert.equal(r.weeks.find(x => x.monday === '2026-11-30').slots.mer.med, 'ZZ');
+});

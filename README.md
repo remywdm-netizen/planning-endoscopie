@@ -41,17 +41,19 @@ RW · LUL · GR · GA — modifiables depuis l'onglet **Médecins** de l'applica
 
 ## 💉 Planning consultations d'anesthésie (T4 2026)
 
-Page dédiée : `consultations.html` (lien : `https://TON-PSEUDO.github.io/planning-endoscopie-2026/consultations.html`).
+Page dédiée : `consultations.html`, protégée par le code d'accès **C2026** (simple barrière côté navigateur : le site restant public, ne pas y mettre de données sensibles) (lien : `https://TON-PSEUDO.github.io/planning-endoscopie-2026/consultations.html`).
 
 | Fichier | Rôle |
 |---|---|
 | `consultations.html` | Affichage du planning hebdomadaire, décompte, totaux, export CSV |
 | `consultations-engine.js` | Moteur de génération : règles, indisponibilités, fériés, overrides (section `DEFAULT_CONFIG`) |
+| `lib/xlsx.full.min.js` | Lecteur Excel (SheetJS 0.18.5, licence Apache-2.0), embarqué pour fonctionner sans CDN |
 | `tests/consultations.test.js` | Vérification automatique des règles (`node --test tests/*.test.js`) |
 
 Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités, fériés monégasques 19/11 et 08/12, overrides de la semaine du 28/09. Onglets de la page :
 - **📅 Planning** : planning hebdomadaire, décompte, totaux, export CSV. **Cliquer sur une case** pour forcer un praticien (titulaire, « Autre MAR » ou praticien externe comme AFR) ou revenir au calcul automatique. Un créneau forcé est conservé même hors règles (une alerte l'indique) et les autres créneaux sont recalculés autour.
 - **🚫 Indisponibilités** : choisir un MAR puis cliquer sur les jours (ou saisir une période) ; le planning est recalculé immédiatement.
+- **📥 Consult. libérales** : charger un fichier Excel (colonnes **Date** et **Médecin**, voir `modele_consultations_liberales.xlsx`). Chaque médecin doit être présent à ses dates d'examen : il reçoit en priorité une consultation d'anesthésie ce jour-là (🩺 dans le planning). Les noms non reconnus s'associent à un MAR en un clic ; les lignes impossibles à satisfaire (indisponibilité, bloc, plafond) sont signalées. Les colonnes d'identité patient ne sont pas enregistrées.
 - **👨‍⚕️ MAR** : modifier les initiales, la couleur et le plafond hebdomadaire des 3 MAR titulaires. Un changement d'initiales est reporté sur les indisponibilités et la semaine de référence.
 
 Les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).
