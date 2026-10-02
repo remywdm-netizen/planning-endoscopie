@@ -38,3 +38,15 @@ RW · LUL · GR · GA — modifiables depuis l'onglet **Médecins** de l'applica
 - Ajout / suppression de médecins avec couleur personnalisée
 - Suivi de l'équité des consultations libérales
 - Export JSON pour sauvegarder sur GitHub
+
+## 💉 Planning consultations d'anesthésie (T4 2026)
+
+Page dédiée : `consultations.html` (lien : `https://TON-PSEUDO.github.io/planning-endoscopie-2026/consultations.html`).
+
+| Fichier | Rôle |
+|---|---|
+| `consultations.html` | Affichage du planning hebdomadaire, décompte, totaux, export CSV |
+| `consultations-engine.js` | Moteur de génération : règles, indisponibilités, fériés, overrides (section `DEFAULT_CONFIG`) |
+| `tests/consultations.test.js` | Vérification automatique des règles (`node --test tests/*.test.js`) |
+
+Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités, fériés monégasques 19/11 et 08/12, overrides de la semaine du 28/09. Pour modifier une indisponibilité, éditer `DEFAULT_CONFIG.indispos` dans `consultations-engine.js`.

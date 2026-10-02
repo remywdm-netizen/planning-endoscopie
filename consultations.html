@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Consultations Anesthésie T4 2026</title>
+<style>
+:root{
+  --bg:#f6f8fa;--surf:#fff;--bd:#d0d7de;
+  --blue:#0969da;--blue-bg:#ddf4ff;--blue-dk:#0550ae;
+  --gbtn:#2da44e;--red:#cf222e;--red-bg:#ffebe9;
+  --yel:#9a6700;--yel-bg:#fff8c5;
+  --text:#24292f;--t2:#57606a;--t3:#8c959f;--head:#24292f;--r:6px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px}
+.bar{background:var(--head);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.bar-title{color:#e6edf3;font-size:15px;font-weight:600}.bar-sub{color:#7d8590;font-size:12px}
+.bar-right{margin-left:auto;display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bd);cursor:pointer;font-size:13px;font-family:var(--font);font-weight:500;background:var(--surf);color:var(--text);text-decoration:none}
+.btn:hover{background:var(--bg)}
+.wrap{max-width:1300px;margin:0 auto;padding:20px 16px}
+h2{font-size:15px;margin:22px 0 10px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:8px}
+.stat{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:11px 13px}
+.stat-l{font-size:11px;color:var(--t2);margin-bottom:2px}.stat-v{font-size:22px;font-weight:600}.stat-s{font-size:11px;color:var(--t3);margin-top:2px}
+.ok{padding:9px 14px;border-radius:var(--r);font-size:13px;margin:12px 0;border:1px solid}
+.ok.good{background:#dafbe1;border-color:#4ac26b;color:#1a7f37}
+.ok.bad{background:var(--red-bg);border-color:#ff8182;color:var(--red)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--surf)}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th{padding:7px 9px;background:var(--bg);border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--t2);text-align:center;white-space:nowrap}
+th.p1{background:#fff3e0;color:#e65100}
+td{padding:5px 7px;border-bottom:1px solid var(--bd);border-right:1px solid var(--bd);font-size:12px;text-align:center;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td:last-child,th:last-child{border-right:none}
+td.wk{text-align:left;font-weight:600;color:var(--blue-dk);white-space:nowrap}
+td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
+.chip{display:inline-block;padding:2px 9px;border-radius:20px;font-weight:700;font-size:12px;color:#fff}
+.chip.autre{background:#eaeef2;color:var(--t2);font-weight:600}
+.cell-d{display:block;font-size:10px;color:var(--t3);margin-top:2px}
+.ferie{background:#f0f0f0;color:var(--t3);font-size:11px;font-style:italic}
+.ov{position:relative}
+.ov::after{content:"✎";position:absolute;top:1px;right:3px;font-size:9px;color:#bc4c00}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2);margin:10px 0}
+.rules{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;font-size:12px;color:var(--t2);line-height:1.7}
+.rules b{color:var(--text)}
+.ind{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.ind-card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 13px;font-size:12px;line-height:1.6}
+.ind-card b{font-size:13px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div>
+    <div class="bar-title">💉 Consultations d'anesthésie</div>
+    <div class="bar-sub">Après-midi · T4 2026 (semaine de référence 28/09 → 31/12)</div>
+  </div>
+  <div class="bar-right">
+    <button class="btn" onclick="exportCSV()">⬇ Export CSV</button>
+    <a class="btn" href="index.html">← Planning endoscopie</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2>Décompte T4 (mardi + jeudi-Consult. 1 uniquement)</h2>
+  <div class="stats" id="stats"></div>
+  <div id="check"></div>
+
+  <h2>Planning hebdomadaire</h2>
+  <div class="legend">
+    <span><span class="chip" style="background:#e65100">&nbsp;</span> Colonnes orange : créneaux comptés au décompte</span>
+    <span>✎ Override manuel</span>
+    <span>Survoler une case : praticiens exclus ce jour-là et pourquoi</span>
+  </div>
+  <div class="tbl-wrap"><table id="plan"></table></div>
+
+  <h2>Total des consultations par praticien</h2>
+  <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
+
+  <h2>Indisponibilités &amp; jours fériés</h2>
+  <div class="ind" id="indispos"></div>
+
+  <h2>Règles appliquées</h2>
+  <div class="rules">
+    <b>Structure</b> : lundi 2 consultations, mardi 1, mercredi 1, jeudi 2.<br/>
+    <b>Report de bloc</b> : praticien du mardi → bloc le lundi suivant ; praticien du jeudi-Consult. 1 → bloc le mardi suivant.<br/>
+    <b>Exclusivité</b> : mardi et jeudi-C1 toujours RW / SG / GR (« Autre MAR » seulement si aucun n'est éligible) ; jamais le même titulaire sur les deux la même semaine.<br/>
+    <b>Plafond</b> : SG et GR 2 consultations / semaine ; RW jusqu'à 3, uniquement si cela évite un « Autre MAR ».<br/>
+    <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
+    <b>Fériés</b> : 19/11 et 08/12 — pas de consultation, pas de report de bloc.<br/>
+    <b>Semaine du 28/09</b> : overrides manuels (mardi = AFR, externe).
+  </div>
+</div>
+
+<script src="consultations-engine.js"></script>
+<script>
+const E = window.ConsultEngine;
+const COLORS = {RW:'#0550ae', SG:'#9333ea', GR:'#1b5e20', AFR:'#0891b2'};
+const MOIS = ['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const result = E.generate();
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function chip(m){
+  if(m===E.AUTRE) return `<span class="chip autre">Autre MAR</span>`;
+  return `<span class="chip" style="background:${COLORS[m]||'#57606a'}">${esc(m)}</span>`;
+}
+function weekLabel(monday){
+  const end=E.addDays(monday,3);
+  return `${E.labelFR(monday)} → ${E.labelFR(end)}`;
+}
+
+function renderStats(){
+  const d=E.decompte(result.weeks,'2026-10-01','2026-12-31');
+  const tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
+  const keys=[...E.TITULAIRES, E.AUTRE];
+  document.getElementById('stats').innerHTML=keys.map(k=>`
+    <div class="stat" style="border-top:3px solid ${COLORS[k]||'#8c959f'}">
+      <div class="stat-l">${esc(k)}</div>
+      <div class="stat-v">${d[k]||0}</div>
+      <div class="stat-s">${(tot[k]&&tot[k].total)||0} consultations au total (oct.–déc.)</div>
+    </div>`).join('');
+  const errs=E.verify(result);
+  document.getElementById('check').innerHTML = errs.length
+    ? `<div class="ok bad">⚠️ ${errs.length} règle(s) non respectée(s) :<br/>${errs.map(esc).join('<br/>')}</div>`
+    : `<div class="ok good">✅ Toutes les règles sont respectées (indispos, reports de bloc, exclusivité, plafonds, fériés).</div>`;
+}
+
+function renderPlan(){
+  let h='<thead><tr><th style="text-align:left">Semaine</th>';
+  E.SLOTS.forEach(s=>{h+=`<th class="${s.prio===1?'p1':''}">${esc(s.label)}</th>`;});
+  h+='</tr></thead><tbody>';
+  let prevMonth=null;
+  result.weeks.forEach(w=>{
+    const m=Number(w.monday.slice(5,7));
+    const sep=prevMonth!==null&&m!==prevMonth?' style="border-top:2px solid #b0c4de"':'';
+    prevMonth=m;
+    h+=`<tr${sep}><td class="wk">${weekLabel(w.monday)}<small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
+    E.SLOTS.forEach(s=>{
+      const c=w.slots[s.id];
+      if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
+      if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
+      const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
+      const tip=ex?`Exclus le ${E.labelFR(c.date)} :\n${ex}`:`Tous les titulaires disponibles le ${E.labelFR(c.date)}`;
+      h+=`<td class="${c.override?'ov':''}" title="${esc(tip)}">${c.med?chip(c.med):'—'}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
+    });
+    h+='</tr>';
+  });
+  document.getElementById('plan').innerHTML=h+'</tbody>';
+}
+
+function renderTotaux(){
+  const tot=E.totaux(result.weeks);
+  const d=E.decompte(result.weeks);
+  const keys=Object.keys(tot).sort((a,b)=>{
+    const o=k=>E.TITULAIRES.includes(k)?E.TITULAIRES.indexOf(k):(k===E.AUTRE?9:5);
+    return o(a)-o(b);
+  });
+  let h=`<thead><tr><th style="text-align:left">Praticien</th><th class="p1">Décompte<br/>(mardi + jeu. C1)</th><th>Lun. C1 + mercredi</th><th>Lun. C2 + jeu. C2</th><th>Total</th></tr></thead><tbody>`;
+  keys.forEach(k=>{
+    const t=tot[k];
+    h+=`<tr><td style="text-align:left">${chip(k)}</td><td><b>${d[k]||0}</b></td><td>${t[2]}</td><td>${t[3]}</td><td><b>${t.total}</b></td></tr>`;
+  });
+  h+=`</tbody>`;
+  document.getElementById('totaux').innerHTML=h;
+}
+
+function renderIndispos(){
+  const cfg=result.config;
+  const fmt=list=>{
+    const byM={};
+    list.forEach(iso=>{const m=Number(iso.slice(5,7));(byM[m]=byM[m]||[]).push(Number(iso.slice(8)));});
+    return Object.entries(byM).map(([m,ds])=>`${MOIS[m]} : ${ds.join(', ')}`).join('<br/>');
+  };
+  let h=E.TITULAIRES.map(t=>`<div class="ind-card" style="border-left:3px solid ${COLORS[t]}"><b>${t}</b><br/>${fmt(cfg.indispos[t])}</div>`).join('');
+  h+=`<div class="ind-card" style="border-left:3px solid var(--red)"><b>Jours fériés (Monaco)</b><br/>${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} — ${esc(n)}`).join('<br/>')}</div>`;
+  document.getElementById('indispos').innerHTML=h;
+}
+
+function exportCSV(){
+  const rows=[['Semaine','Créneau','Date','Praticien','Compté au décompte']];
+  result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
+    const c=w.slots[s.id];
+    rows.push([w.monday,s.label,c.date,c.ferie?`Férié (${c.ferie})`:(c.med||''),s.prio===1?'oui':'non']);
+  }));
+  const csv='﻿'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='consultations_anesthesie_T4_2026.csv';
+  a.click();
+}
+
+renderStats();
+renderPlan();
+renderTotaux();
+renderIndispos();
+</script>
+</body>
+</html>
