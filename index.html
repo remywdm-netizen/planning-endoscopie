@@ -186,6 +186,7 @@ table.plan td:last-child,table.plan th:last-child{border-right:none}
   <div><div class="bar-title">Planning Endoscopie 2026</div><div class="bar-sub">Juillet → Décembre 2026</div></div>
   <div class="bar-right">
     <span class="bar-role" id="bar-role"></span>
+    <a class="btn btn-d" href="consultations.html" style="text-decoration:none">💉 Consultations anesthésie</a>
     <button class="btn btn-d" id="btn-export" onclick="exportJSON()" style="display:none">⬇ Export JSON</button>
     <button class="btn btn-d" onclick="logout()" title="Se déconnecter">🔓 Quitter</button>
   </div>
@@ -386,6 +387,7 @@ table.plan td:last-child,table.plan th:last-child{border-right:none}
 // ══════════════════════════════════════════════════════════
 const ACCESS_CODES = {
   admin:   "endo2026",       // Accès total
+  site:    "C2026",          // Code d'ouverture du site (accès total)
   lecteur: "planning26",     // Lecture seule
   medecins: {                // Code par médecin (indispos propres seulement)
     "RW":  "rw2026",
@@ -405,6 +407,7 @@ function checkCode(code){
   const c=code.trim();
   if(!c)return null;
   if(c===ACCESS_CODES.admin) return{role:"admin"};
+  if(c.toUpperCase()===ACCESS_CODES.site) return{role:"admin"};
   if(c===ACCESS_CODES.lecteur) return{role:"lecteur"};
   for(const[med,mc] of Object.entries({...ACCESS_CODES.medecins,...EXTRA_MED_CODES})){
     if(c===mc) return{role:`med:${med}`,med};
