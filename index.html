@@ -111,6 +111,10 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .mar-card input[type=text],.mar-card select{width:100%;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px;font-family:var(--font)}
 .mar-card input[type=text]{text-transform:uppercase;font-weight:700;letter-spacing:1px}
 .mar-card input[type=color]{width:50px;height:32px;border:1px solid var(--bd);border-radius:var(--r);padding:2px;background:var(--surf);cursor:pointer}
+.mar-card{position:relative}
+.mar-del{position:absolute;top:8px;right:8px;border:none;background:none;color:var(--red);cursor:pointer;font-size:12px;font-family:var(--font)}
+.mar-del:hover{text-decoration:underline}
+.mar-add{border:2px dashed var(--bd);border-top:2px dashed var(--bd);background:var(--bg)}
 .mar-card .meta{font-size:11px;color:var(--t3);margin-top:10px}
 .lock{position:fixed;inset:0;background:var(--head);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .lock-box{background:#fff;border-radius:14px;padding:32px 28px;width:340px;max-width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.35)}
@@ -229,7 +233,7 @@ td.l{text-align:left}
 
   <!-- ── MAR ── -->
   <div class="view" id="view-mar">
-    <p class="hint">Les 3 MAR titulaires assurent obligatoirement le mardi et le jeudi-Consult. 1. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
+    <p class="hint">Les MAR titulaires (2 à 6) assurent obligatoirement le mardi et le jeudi-Consult. 1 et se partagent toutes les consultations. Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
     <div class="mar-cards" id="mar-cards"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
@@ -253,6 +257,8 @@ td.l{text-align:left}
 <script>
 const E = window.ConsultEngine;
 const STORE_KEY = 'consult_anesth_cfg_2026';
+const MIN_MAR = 2, MAX_MAR = 6; // au-delà de 6, le calcul devient lent
+const PALETTE = ['#0550ae','#9333ea','#1b5e20','#b45309','#be185d','#0891b2','#7c2d12','#4338ca'];
 const EXTRA_COLORS = {AFR:'#0891b2'};
 const MOIS = ['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 const MOIS_LONG = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -281,7 +287,7 @@ function cleanCfg(c){
   return c;
 }
 function validConfig(c){
-  return c && Array.isArray(c.titulaires) && c.titulaires.length===3
+  return c && Array.isArray(c.titulaires) && c.titulaires.length>=MIN_MAR && c.titulaires.length<=MAX_MAR
     && c.titulaires.every(t=>t && typeof t.code==='string' && t.code)
     && c.indispos && typeof c.indispos==='object';
 }
@@ -543,7 +549,8 @@ function renderMars(){
   document.getElementById('mar-cards').innerHTML=cfg.titulaires.map((t,i)=>{
     const nInd=(cfg.indispos[t.code]||[]).length;
     const d=(result&&E.decompte(result.weeks,'2026-10-01','2026-12-31')[t.code])||0;
-    return `<div class="mar-card" style="border-top-color:${t.couleur}" id="mc-${i}">
+    const del=cfg.titulaires.length>MIN_MAR?`<button class="mar-del" onclick="delMar(${i})" title="Retirer ce MAR">🗑 Retirer</button>`:'';
+    return `<div class="mar-card" style="border-top-color:${t.couleur}" id="mc-${i}">${del}
       <label for="mc-code-${i}">Initiales</label>
       <input type="text" id="mc-code-${i}" value="${esc(t.code)}" maxlength="6" oninput="this.value=this.value.toUpperCase()"/>
       <label for="mc-col-${i}">Couleur</label>
@@ -555,7 +562,40 @@ function renderMars(){
       </select>
       <div class="meta">${nInd} jour(s) d'indisponibilité · décompte T4 : ${d}</div>
     </div>`;
-  }).join('');
+  }).join('')+(cfg.titulaires.length<MAX_MAR?`<div class="mar-card mar-add">
+      <b>➕ Ajouter un MAR</b>
+      <label for="mc-new-code">Initiales</label>
+      <input type="text" id="mc-new-code" maxlength="6" placeholder="ex. AB" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')addMar()"/>
+      <label for="mc-new-col">Couleur</label>
+      <input type="color" id="mc-new-col" value="${PALETTE.find(c=>!cfg.titulaires.some(t=>t.couleur===c))||'#57606a'}"/>
+      <div style="margin-top:12px"><button class="btn btn-g" onclick="addMar()">+ Ajouter</button></div>
+      <div class="meta">Plafond 2 / semaine, sans indisponibilité : à compléter ensuite.</div>
+    </div>`:`<div class="mar-card mar-add"><div class="meta">Maximum ${MAX_MAR} MAR atteint.</div></div>`);
+}
+function codeError(code){
+  if(!/^[A-Z0-9À-Ü-]{1,6}$/.test(code)) return `Initiales invalides : « ${code||'vide'} »`;
+  if(['AUTRE','AUTRE MAR','AFR'].includes(code)) return `« ${code} » est réservé`;
+  return null;
+}
+function addMar(){
+  const code=document.getElementById('mc-new-code').value.trim().toUpperCase();
+  const err=codeError(code);
+  if(err){toast(err);return;}
+  if(codes().includes(code)){toast(`${code} existe déjà`);return;}
+  if(cfg.titulaires.length>=MAX_MAR){toast(`Maximum ${MAX_MAR} MAR`);return;}
+  cfg.titulaires=cfg.titulaires.concat([{code,couleur:document.getElementById('mc-new-col').value,max:2}]);
+  cfg.indispos=Object.assign({},cfg.indispos,{[code]:cfg.indispos[code]||[]});
+  changed();
+  toast(`✅ ${code} ajouté — saisir ses indisponibilités dans l'onglet 🚫`);
+}
+function delMar(i){
+  const t=cfg.titulaires[i];
+  if(!t||cfg.titulaires.length<=MIN_MAR) return;
+  if(!confirm(`Retirer ${t.code} des MAR titulaires ?\nSes indisponibilités seront effacées. S'il est forcé sur des créneaux, il y reste comme praticien externe.`)) return;
+  cfg.titulaires=cfg.titulaires.filter((x,j)=>j!==i);
+  const ind=Object.assign({},cfg.indispos); delete ind[t.code]; cfg.indispos=ind;
+  changed();
+  toast(`${t.code} retiré`);
 }
 function saveMars(){
   const vals=cfg.titulaires.map((t,i)=>({
@@ -564,10 +604,9 @@ function saveMars(){
     couleur:document.getElementById('mc-col-'+i).value,
     max:Number(document.getElementById('mc-max-'+i).value),
   }));
-  const reserved=['AUTRE','AUTRE MAR','AFR'];
   for(const v of vals){
-    if(!/^[A-Z0-9À-Ü-]{1,6}$/.test(v.code)){toast(`Initiales invalides : « ${v.code||'vide'} »`);return;}
-    if(reserved.includes(v.code)){toast(`« ${v.code} » est réservé`);return;}
+    const err=codeError(v.code);
+    if(err){toast(err);return;}
   }
   if(new Set(vals.map(v=>v.code)).size!==vals.length){toast('Deux MAR ont les mêmes initiales');return;}
 

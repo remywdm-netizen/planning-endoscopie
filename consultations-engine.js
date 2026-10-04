@@ -40,7 +40,7 @@
     // Plafond hebdomadaire normal ; un titulaire dont "max" est plus élevé
     // ne le dépasse que si cela évite un "Autre MAR".
     cap: 2,
-    // Les 3 MAR titulaires (modifiables depuis l'onglet "MAR").
+    // MAR titulaires (modifiables, ajout / retrait depuis l'onglet "MAR").
     titulaires: [
       { code: 'RW', couleur: '#0550ae', max: 3 },
       { code: 'SG', couleur: '#9333ea', max: 2 },

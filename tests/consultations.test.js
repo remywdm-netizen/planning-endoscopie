@@ -230,3 +230,17 @@ test('patient libéral : vendredi, hors période, bloc avant consultation', () =
   assert.deepEqual(E.verify(r), []);
   assert.deepEqual(E.alertes(r), []);
 });
+
+test('ajout d\'un 4e MAR : intégré à la rotation et au décompte', () => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.titulaires.push({ code: 'AB', couleur: '#b45309', max: 2 });
+  cfg.indispos.AB = ['2026-10-13'];
+  const r = E.generate(cfg);
+  assert.deepEqual(E.verify(r), []);
+  const d = E.decompte(r.weeks, '2026-10-01', '2026-12-31');
+  assert.ok((d.AB || 0) > 0, JSON.stringify(d));
+  assert.notEqual(r.weeks.find(w => w.monday === '2026-10-12').slots.mar.med, 'AB');
+  // Plus de MAR → moins de recours à "Autre MAR"
+  const autre = res => res.weeks.reduce((n, w) => n + E.SLOTS.filter(s => w.slots[s.id].med === E.AUTRE).length, 0);
+  assert.ok(autre(r) < autre(result));
+});
