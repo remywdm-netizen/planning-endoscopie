@@ -574,7 +574,7 @@ function renderMars(){
 }
 function codeError(code){
   if(!/^[A-Z0-9À-Ü-]{1,6}$/.test(code)) return `Initiales invalides : « ${code||'vide'} »`;
-  if(['AUTRE','AUTRE MAR','AFR'].includes(code)) return `« ${code} » est réservé`;
+  if(['AUTRE','AUTRE MAR'].includes(code)) return `« ${code} » est réservé`;
   return null;
 }
 function addMar(){
