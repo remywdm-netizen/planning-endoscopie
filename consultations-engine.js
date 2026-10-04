@@ -44,7 +44,7 @@
     titulaires: [
       { code: 'RW', couleur: '#0550ae', max: 3 },
       { code: 'SG', couleur: '#9333ea', max: 2 },
-      { code: 'GR', couleur: '#1b5e20', max: 2 },
+      { code: 'GR', couleur: '#1b5e20', max: 2, part: 30 }, // 30 % des consultations libérales
     ],
     feries: {
       '2026-11-19': 'Fête Nationale Monégasque',
@@ -103,6 +103,7 @@
     cfg.codes = cfg.titulaires.map(t => t.code);
     cfg.maxOf = {};
     cfg.titulaires.forEach(t => { cfg.maxOf[t.code] = t.max || cfg.cap; });
+    cfg.shareOf = partsLiberales(cfg.titulaires);
     // date de consultation → dates de bloc (postérieures) de ses patients
     cfg.libMap = {};
     (cfg.liberales || []).forEach(l => {
@@ -112,6 +113,23 @@
     });
     Object.values(cfg.libMap).forEach(a => a.sort());
     return cfg;
+  }
+
+  // Part visée des consultations libérales (mardi + jeudi-C1) pour chaque MAR :
+  // "part" (en %) si renseignée, sinon le reste partagé à égalité.
+  function partsLiberales(titulaires) {
+    const fixe = titulaires.filter(t => typeof t.part === 'number' && t.part >= 0);
+    const libres = titulaires.filter(t => !fixe.includes(t));
+    const somme = fixe.reduce((a, t) => a + t.part, 0) / 100;
+    const res = {};
+    if (!libres.length) {
+      fixe.forEach(t => { res[t.code] = somme > 0 ? t.part / 100 / somme : 1 / fixe.length; });
+    } else {
+      fixe.forEach(t => { res[t.code] = t.part / 100; });
+      const reste = Math.max(0, 1 - somme) / libres.length;
+      libres.forEach(t => { res[t.code] = reste; });
+    }
+    return res;
   }
 
   // Renomme un titulaire : reporte ses indisponibilités et overrides
@@ -130,8 +148,46 @@
   }
 
   // ── Génération ──────────────────────────────────────────────
+  // Le calcul avance semaine par semaine : viser une part (ex. GR 30 %) trop
+  // strictement peut forcer un "Autre MAR" plus tard. On calcule donc plusieurs
+  // variantes (tolérance autour de la part visée) et on garde la meilleure :
+  // part respectée à 1 créneau près, puis le moins d'"Autre MAR".
   function generate(userConfig) {
-    const cfg = resolveConfig(userConfig);
+    const base = resolveConfig(userConfig);
+    if (!base.titulaires.some(t => typeof t.part === 'number')) return generateOnce(base, 0);
+    const tols = base.codes.length >= 5 ? [0, 2] : [0, 1, 2];
+    let best = null, bestKey = null;
+    tols.forEach(tol => {
+      const r = generateOnce(base, tol);
+      const k = qualite(r);
+      if (!bestKey || lexLess(k, bestKey)) { best = r; bestKey = k; }
+    });
+    return best;
+  }
+  function qualite(result) {
+    const { config: cfg, weeks } = result;
+    let autreLib = 0, autre = 0, tot = 0;
+    const c = {};
+    weeks.forEach(w => SLOTS.forEach(s => {
+      const m = w.slots[s.id].med;
+      if (!m) return;
+      if (m === AUTRE) autre++;
+      if (s.prio !== 1) return;
+      tot++;
+      if (m === AUTRE) autreLib++;
+      c[m] = (c[m] || 0) + 1;
+    }));
+    let horsPart = 0, ecart = 0;
+    cfg.codes.forEach(t => {
+      const e = Math.abs((c[t] || 0) - cfg.shareOf[t] * tot);
+      ecart += e * e;
+      if (cfg.titulaires.find(x => x.code === t).part != null) horsPart += Math.max(0, e - 1);
+    });
+    return [Math.round(horsPart * 1e6), autreLib, autre, Math.round(ecart * 1e6)];
+  }
+
+  function generateOnce(cfg, tolLib) {
+    cfg = Object.assign({}, cfg, { tolLib });
     const codes = cfg.codes;
     const isTit = m => codes.includes(m);
     const indispo = {};
@@ -140,6 +196,7 @@
     const blocked = {};   // iso → Map(praticien → raison)
     const cum = {};       // cumuls par priorité
     codes.forEach(t => { cum[t] = { 1: 0, 2: 0, 3: 0 }; });
+    cum._lib = 0; // libérales attribuées (tous praticiens, "Autre MAR" compris)
 
     const weeks = [];
     for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
@@ -180,6 +237,7 @@
         };
         if (!who) return;
         if (isTit(who)) cum[who][c.slot.prio]++;
+        if (c.slot.prio === 1) cum._lib++;
         const rep = REPORT_BLOC[c.slot.id];
         if (rep && isTit(who)) {
           const target = addDays(c.date, rep.offset);
@@ -280,6 +338,13 @@
       const v = cum[t][prio] + add[t][prio];
       return acc + v * v;
     }, 0);
+    // Libérales : écart à la part visée de chaque MAR (ex. GR 30 %)
+    const totLib = cum._lib + ctx.filter((c, i) => c.slot.prio === 1 && cur[i]).length;
+    const tol = cfg.tolLib || 0; // tolérance (en créneaux) autour de la part visée
+    const balLib = codes.reduce((acc, t) => {
+      const e = Math.max(0, Math.abs(cum[t][1] + add[t][1] - cfg.shareOf[t] * totLib) - tol);
+      return acc + e * e;
+    }, 0);
     const depassement = codes.reduce((acc, t) =>
       acc + Math.max(0, add[t][1] + add[t][2] + add[t][3] - cfg.cap), 0);
     const tot = codes.reduce((acc, t) => {
@@ -287,7 +352,7 @@
       return acc + v * v;
     }, 0);
     return [
-      autre[1], bal(1),
+      autre[1], Math.round(balLib * 1e6) / 1e6, bal(1),
       autre[2] + autre[3],
       depassement,
       autre[2], bal(2), bal(3),
@@ -440,7 +505,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, SLOTS, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, SLOTS, partsLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };

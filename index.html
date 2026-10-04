@@ -284,6 +284,12 @@ function cleanCfg(c){
   const ok=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d);
   c.liberales=(Array.isArray(c.liberales)?c.liberales:[]).filter(l=>l&&ok(l.consult)&&ok(l.bloc));
   delete c.libRows; delete c.aliases; // ancien format (colonne médecin)
+  // Configurations enregistrées avant la règle « GR 30 % des libérales »
+  if(!c.partsV){
+    const gr=c.titulaires.find(t=>t.code==='GR');
+    if(gr&&gr.part==null) gr.part=30;
+    c.partsV=1;
+  }
   return c;
 }
 function validConfig(c){
@@ -293,7 +299,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[]};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -334,12 +340,17 @@ function renderStats(){
   const d=E.decompte(result.weeks,'2026-10-01','2026-12-31');
   const tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
   const keys=[...codes(), E.AUTRE];
-  document.getElementById('stats').innerHTML=keys.map(k=>`
+  const totLib=Object.values(d).reduce((a,b)=>a+b,0)||1;
+  document.getElementById('stats').innerHTML=keys.map(k=>{
+    const t=cfg.titulaires.find(x=>x.code===k);
+    const pct=Math.round(100*(d[k]||0)/totLib);
+    const cible=t&&t.part!=null?` · cible ${t.part} %`:'';
+    return `
     <div class="stat" style="border-top:3px solid ${k===E.AUTRE?'#8c959f':colorOf(k)}">
       <div class="stat-l">${esc(k)}</div>
-      <div class="stat-v">${d[k]||0}</div>
+      <div class="stat-v">${d[k]||0} <small style="font-size:13px;font-weight:500;color:var(--t2)">${pct} %${cible}</small></div>
       <div class="stat-s">${(tot[k]&&tot[k].total)||0} consultations au total (oct.–déc.)</div>
-    </div>`).join('');
+    </div>`;}).join('');
   const errs=E.verify(result);
   document.getElementById('check').innerHTML = errs.length
     ? `<div class="ok bad">⚠️ ${errs.length} règle(s) non respectée(s) :<br/>${errs.map(esc).join('<br/>')}</div>`
@@ -471,6 +482,7 @@ function renderRules(){
     <b>Report de bloc</b> : praticien du mardi → bloc le lundi suivant ; praticien du jeudi-Consult. 1 → bloc le mardi suivant.<br/>
     <b>Exclusivité</b> : mardi et jeudi-C1 toujours ${cs.map(esc).join(' / ')} (« Autre MAR » seulement si aucun n'est éligible) ; jamais le même titulaire sur les deux la même semaine.<br/>
     <b>Plafond / semaine</b> : ${plaf} — au-delà de ${cfg.cap}, uniquement si cela évite un « Autre MAR ».<br/>
+    <b>Consultations libérales (mardi + jeudi-C1)</b> : ${cfg.titulaires.filter(t=>t.part!=null).map(t=>`${esc(t.code)} ${t.part} %`).join(', ')||'aucune part fixée'}${cfg.titulaires.some(t=>t.part!=null)?' (à 1 créneau près), le reste réparti à égalité':''}.<br/>
     <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
     <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
@@ -560,6 +572,8 @@ function renderMars(){
         <option value="2"${(t.max||2)==2?' selected':''}>2 consultations / semaine</option>
         <option value="3"${t.max==3?' selected':''}>Jusqu'à 3 (si ça évite un « Autre MAR »)</option>
       </select>
+      <label for="mc-part-${i}">Part des consultations libérales (mardi + jeu. C1)</label>
+      <div style="display:flex;align-items:center;gap:6px"><input type="number" id="mc-part-${i}" min="0" max="100" step="1" placeholder="équitable" value="${t.part!=null?t.part:''}" style="width:110px;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px;font-family:var(--font)"/> %</div>
       <div class="meta">${nInd} jour(s) d'indisponibilité · décompte T4 : ${d}</div>
     </div>`;
   }).join('')+(cfg.titulaires.length<MAX_MAR?`<div class="mar-card mar-add">
@@ -603,7 +617,15 @@ function saveMars(){
     code:document.getElementById('mc-code-'+i).value.trim().toUpperCase(),
     couleur:document.getElementById('mc-col-'+i).value,
     max:Number(document.getElementById('mc-max-'+i).value),
+    part:document.getElementById('mc-part-'+i).value.trim(),
   }));
+  for(const v of vals){
+    if(v.part==='') {v.part=null;continue;}
+    v.part=Number(v.part);
+    if(!(v.part>=0&&v.part<=100)){toast(`Part invalide pour ${v.code} (0 à 100 %)`);return;}
+  }
+  const totalPart=vals.reduce((a,v)=>a+(v.part||0),0);
+  if(totalPart>100){toast(`Les parts fixées dépassent 100 % (${totalPart} %)`);return;}
   for(const v of vals){
     const err=codeError(v.code);
     if(err){toast(err);return;}
@@ -614,7 +636,10 @@ function saveMars(){
   let next=clone(cfg);
   vals.forEach((v,i)=>{ if(v.old!==v.code) next=E.renameTitulaire(next,v.old,'__tmp'+i); });
   vals.forEach((v,i)=>{ if(v.old!==v.code) next=E.renameTitulaire(next,'__tmp'+i,v.code); });
-  next.titulaires.forEach((t,i)=>{t.couleur=vals[i].couleur;t.max=vals[i].max;});
+  next.titulaires.forEach((t,i)=>{
+    t.couleur=vals[i].couleur;t.max=vals[i].max;
+    if(vals[i].part==null) delete t.part; else t.part=vals[i].part;
+  });
   cfg=next;
   changed();
   toast('✅ MAR enregistrés');
