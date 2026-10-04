@@ -274,3 +274,33 @@ test('part libérale personnalisée : 50 % pour un MAR ajouté', () => {
   assert.ok(d.AFR > d.RW && d.AFR > d.SG && d.AFR > d.GR, JSON.stringify(d));
   assert.ok(Math.abs(d.AFR - 0.5 * total) <= 2, JSON.stringify(d));
 });
+
+const X = require('../excel-export.js');
+
+test('export Excel : numéro de semaine ISO', () => {
+  assert.equal(X.semaineISO('2026-10-05'), 41);
+  assert.equal(X.semaineISO('2026-12-28'), 53);
+  assert.equal(X.semaineISO('2026-09-28'), 40);
+});
+
+test('export Excel : contenu endoscopie de la semaine 41', () => {
+  const w = week('2026-10-05');
+  const jours = X.contenuSemaine(result, w);
+  assert.equal(jours.length, 5);
+  // Consultations de l'après-midi = planning du site
+  assert.deepEqual(jours[0].consult, [w.slots.lun1.med, w.slots.lun2.med]);
+  assert.deepEqual(jours[1].consult, [w.slots.mar.med]);
+  assert.deepEqual(jours[3].consult, [w.slots.jeu1.med, w.slots.jeu2.med]);
+  assert.deepEqual(jours[4].consult, []);
+  // Bloc du matin par report : AFR (mardi 29/09) le lundi, GR (jeudi-C1 01/10) le mardi
+  assert.deepEqual(jours[0].bloc, ['AFR']);
+  assert.deepEqual(jours[1].bloc, ['GR']);
+  // Absents = indisponibilités des MAR
+  assert.ok(jours[0].absents.includes('RW'));
+});
+
+test('export Excel : jour férié sans consultation', () => {
+  const jours = X.contenuSemaine(result, week('2026-11-16'));
+  assert.equal(jours[3].ferie, 'Fête Nationale Monégasque');
+  assert.deepEqual(jours[3].consult, []);
+});
