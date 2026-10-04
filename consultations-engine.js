@@ -36,6 +36,7 @@
 
   const DEFAULT_CONFIG = {
     start: '2026-09-28', // lundi de la semaine de référence
+    debutDecompte: '2026-10-01', // le décompte (et la part de GR) commence au T4
     end: '2026-12-31',
     // Plafond hebdomadaire normal ; un titulaire dont "max" est plus élevé
     // ne le dépasse que si cela évite un "Autre MAR".
@@ -149,45 +150,66 @@
 
   // ── Génération ──────────────────────────────────────────────
   // Le calcul avance semaine par semaine : viser une part (ex. GR 30 %) trop
-  // strictement peut forcer un "Autre MAR" plus tard. On calcule donc plusieurs
-  // variantes (tolérance autour de la part visée) et on garde la meilleure :
-  // part respectée à 1 créneau près, puis le moins d'"Autre MAR".
+  // strictement peut forcer un "Autre MAR" plus tard, trop mollement la
+  // laisser sous la cible. On calcule donc plusieurs variantes (tolérance et
+  // marge au-dessus de la part) et on garde la meilleure : part minimale
+  // atteinte, puis le moins d'"Autre MAR".
   function generate(userConfig) {
     const base = resolveConfig(userConfig);
-    if (!base.titulaires.some(t => typeof t.part === 'number')) return generateOnce(base, 0);
-    const tols = base.codes.length >= 5 ? [0, 2] : [0, 1, 2];
+    if (!base.titulaires.some(t => typeof t.part === 'number')) return generateOnce(base, 0, 0);
+    const n = base.codes.length;
+    const variantes = n <= 4
+      ? [0, 1, 2].flatMap(tol => [0, 0.03, 0.06, 0.1].map(marge => [tol, marge]))
+      : n === 5 ? [[0, 0], [2, 0], [0, 0.04], [0, 0.08], [2, 0.04], [2, 0.08]]
+        : [[0, 0.05], [0, 0], [2, 0], [0, 0.1]];
     let best = null, bestKey = null;
-    tols.forEach(tol => {
-      const r = generateOnce(base, tol);
+    for (const [tol, marge] of variantes) {
+      const r = generateOnce(base, tol, marge);
       const k = qualite(r);
       if (!bestKey || lexLess(k, bestKey)) { best = r; bestKey = k; }
-    });
+      // Part minimale atteinte au plus juste, sans "Autre MAR" sur les libérales : inutile de continuer
+      if (k[0] === 0 && k[1] === 0 && k[2] === 0) break;
+    }
     return best;
   }
-  function qualite(result) {
+  // Libérales du décompte (à partir de debutDecompte) : total et par praticien.
+  function comptesLiberales(result) {
     const { config: cfg, weeks } = result;
-    let autreLib = 0, autre = 0, tot = 0;
     const c = {};
+    let tot = 0, autreLib = 0, autre = 0;
     weeks.forEach(w => SLOTS.forEach(s => {
-      const m = w.slots[s.id].med;
-      if (!m) return;
-      if (m === AUTRE) autre++;
+      const x = w.slots[s.id];
+      if (!x.med || x.date < cfg.debutDecompte) return;
+      if (x.med === AUTRE) autre++;
       if (s.prio !== 1) return;
       tot++;
-      if (m === AUTRE) autreLib++;
-      c[m] = (c[m] || 0) + 1;
+      if (x.med === AUTRE) autreLib++;
+      c[x.med] = (c[x.med] || 0) + 1;
     }));
-    let horsPart = 0, ecart = 0;
-    cfg.codes.forEach(t => {
-      const e = Math.abs((c[t] || 0) - cfg.shareOf[t] * tot);
+    return { c, tot, autreLib, autre };
+  }
+  // Nombre minimal de libérales pour un MAR avec une part fixée (30 % de 25 → 8).
+  function minimumPart(part, tot) { return Math.ceil(part / 100 * tot - 1e-9); }
+  function qualite(result) {
+    const cfg = result.config;
+    const { c, tot, autreLib, autre } = comptesLiberales(result);
+    let manque = 0, exces = 0, ecart = 0;
+    cfg.titulaires.forEach(t => {
+      const n = c[t.code] || 0;
+      const e = n - cfg.shareOf[t.code] * tot;
       ecart += e * e;
-      if (cfg.titulaires.find(x => x.code === t).part != null) horsPart += Math.max(0, e - 1);
+      if (t.part == null) return;
+      const min = minimumPart(t.part, tot);
+      manque += Math.max(0, min - n);
+      exces += Math.max(0, n - min);
     });
-    return [Math.round(horsPart * 1e6), autreLib, autre, Math.round(ecart * 1e6)];
+    return [manque, autreLib, exces, autre, Math.round(ecart * 1e6)];
   }
 
-  function generateOnce(cfg, tolLib) {
-    cfg = Object.assign({}, cfg, { tolLib });
+  function generateOnce(cfg, tolLib, marge) {
+    const shareOf = Object.assign({}, cfg.shareOf);
+    cfg.titulaires.forEach(t => { if (t.part != null) shareOf[t.code] += marge; });
+    cfg = Object.assign({}, cfg, { tolLib, shareOf });
     const codes = cfg.codes;
     const isTit = m => codes.includes(m);
     const indispo = {};
@@ -505,7 +527,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, SLOTS, partsLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, SLOTS, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
