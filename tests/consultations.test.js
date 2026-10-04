@@ -244,3 +244,30 @@ test('ajout d\'un 4e MAR : intégré à la rotation et au décompte', () => {
   const autre = res => res.weeks.reduce((n, w) => n + E.SLOTS.filter(s => w.slots[s.id].med === E.AUTRE).length, 0);
   assert.ok(autre(r) < autre(result));
 });
+
+test('GR : 30 % des consultations libérales (à 1 créneau près)', () => {
+  const lib = r => {
+    const d = E.decompte(r.weeks, '2026-10-01', '2026-12-31');
+    return { d, total: Object.values(d).reduce((a, b) => a + b, 0) };
+  };
+  const scenarios = [[], ['AFR'], ['AFR', 'AB']];
+  scenarios.forEach(extra => {
+    const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+    extra.forEach(code => cfg.titulaires.push({ code, couleur: '#000', max: 2 }));
+    const r = E.generate(cfg);
+    const { d, total } = lib(r);
+    assert.ok(Math.abs(d.GR - 0.3 * total) <= 1, `${3 + extra.length} MAR : ${JSON.stringify(d)}`);
+    assert.deepEqual(E.verify(r), []);
+  });
+});
+
+test('part libérale personnalisée : 50 % pour un MAR ajouté', () => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.titulaires.push({ code: 'AFR', couleur: '#000', max: 2 });
+  cfg.titulaires.forEach(t => { delete t.part; if (t.code === 'AFR') t.part = 50; });
+  const r = E.generate(cfg);
+  const d = E.decompte(r.weeks, '2026-10-01', '2026-12-31');
+  const total = Object.values(d).reduce((a, b) => a + b, 0);
+  assert.ok(d.AFR > d.RW && d.AFR > d.SG && d.AFR > d.GR, JSON.stringify(d));
+  assert.ok(Math.abs(d.AFR - 0.5 * total) <= 2, JSON.stringify(d));
+});
