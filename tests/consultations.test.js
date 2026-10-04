@@ -245,20 +245,23 @@ test('ajout d\'un 4e MAR : intégré à la rotation et au décompte', () => {
   assert.ok(autre(r) < autre(result));
 });
 
-test('GR : 30 % des consultations libérales (à 1 créneau près)', () => {
-  const lib = r => {
-    const d = E.decompte(r.weeks, '2026-10-01', '2026-12-31');
-    return { d, total: Object.values(d).reduce((a, b) => a + b, 0) };
-  };
-  const scenarios = [[], ['AFR'], ['AFR', 'AB']];
-  scenarios.forEach(extra => {
+test('GR : au moins 30 % des consultations libérales, de 3 à 6 MAR', () => {
+  [[], ['AFR'], ['AFR', 'AB'], ['AFR', 'AB', 'CD']].forEach(extra => {
     const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
     extra.forEach(code => cfg.titulaires.push({ code, couleur: '#000', max: 2 }));
     const r = E.generate(cfg);
-    const { d, total } = lib(r);
-    assert.ok(Math.abs(d.GR - 0.3 * total) <= 1, `${3 + extra.length} MAR : ${JSON.stringify(d)}`);
+    const d = E.decompte(r.weeks, '2026-10-01', '2026-12-31');
+    const total = Object.values(d).reduce((a, b) => a + b, 0);
+    assert.ok(d.GR >= E.minimumPart(30, total), `${3 + extra.length} MAR : ${JSON.stringify(d)}`);
+    assert.ok(d.GR / total >= 0.3, `${3 + extra.length} MAR : ${JSON.stringify(d)}`);
     assert.deepEqual(E.verify(r), []);
   });
+});
+
+test('minimum arrondi au créneau supérieur', () => {
+  assert.equal(E.minimumPart(30, 25), 8);
+  assert.equal(E.minimumPart(30, 20), 6);
+  assert.equal(E.minimumPart(30, 21), 7);
 });
 
 test('part libérale personnalisée : 50 % pour un MAR ajouté', () => {
