@@ -48,6 +48,7 @@
       { code: 'GR', couleur: '#1b5e20', max: 2, part: 30 }, // 30 % des consultations libérales
     ],
     feries: {
+      '2026-11-02': 'Toussaint (reportée au lundi)',
       '2026-11-19': 'Fête Nationale Monégasque',
       '2026-12-08': 'Immaculée Conception',
     },
@@ -156,13 +157,24 @@
   // atteinte, puis le moins d'"Autre MAR".
   function generate(userConfig) {
     const base = resolveConfig(userConfig);
-    if (!base.titulaires.some(t => typeof t.part === 'number')) return generateOnce(base, 0, 0);
+    // Plan optimal des libérales (mardi + jeudi-C1) calculé sur tout le trimestre :
+    // le calcul semaine par semaine le suit tant que c'est possible.
+    const plan = planLiberales(base);
+    const avecPlan = plan ? Object.assign({}, base, { plan }) : base;
+    if (!base.titulaires.some(t => typeof t.part === 'number')) {
+      const r1 = generateOnce(avecPlan, 0, 0);
+      if (!plan) return r1;
+      const r0 = generateOnce(base, 0, 0);
+      return lexLess(qualite(r0), qualite(r1)) ? r0 : r1;
+    }
+    let best = plan ? generateOnce(avecPlan, 0, 0) : null;
+    let bestKey = best ? qualite(best) : null;
+    if (bestKey && bestKey[0] === 0 && bestKey[2] === 0 && bestKey[1] <= (plan._autre || 0)) return best;
     const n = base.codes.length;
     const variantes = n <= 4
       ? [0, 1, 2].flatMap(tol => [0, 0.03, 0.06, 0.1].map(marge => [tol, marge]))
       : n === 5 ? [[0, 0], [2, 0], [0, 0.04], [0, 0.08], [2, 0.04], [2, 0.08]]
         : [[0, 0.05], [0, 0], [2, 0], [0, 0.1]];
-    let best = null, bestKey = null;
     for (const [tol, marge] of variantes) {
       const r = generateOnce(base, tol, marge);
       const k = qualite(r);
@@ -172,6 +184,102 @@
     }
     return best;
   }
+  // Plan optimal des libérales sur tout le trimestre (programmation dynamique) :
+  // le moins d'"Autre MAR", puis la part minimale (ex. GR 30 %), puis l'équilibre.
+  // Contraintes prises en compte : indisponibilités le jour de la consultation et
+  // le jour du bloc (report, patients libéraux), MAR du jeudi-C1 au bloc le mardi
+  // suivant, pas le même MAR mardi et jeudi-C1, créneaux forcés, jours fériés.
+  function planLiberales(cfg) {
+    const codes = cfg.codes;
+    const indispo = {};
+    codes.forEach(t => { indispo[t] = new Set(cfg.indispos[t] || []); });
+    const etapes = [];       // une étape par semaine : créneaux mardi et jeudi-C1
+    let prev0 = null;        // MAR du jeudi-C1 de la dernière semaine forcée
+    const init = {};
+    codes.forEach(t => { init[t] = 0; });
+    let total = 0;
+    for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
+      const forces = cfg.overrides[monday] || {};
+      const sl = ['mar', 'jeu1'].map(id => {
+        const s = SLOTS.find(x => x.id === id);
+        const date = addDays(monday, s.dow);
+        const actif = !cfg.feries[date] && date <= cfg.end;
+        return { id, date, actif, force: actif && forces[id] ? forces[id] : null };
+      });
+      const actifs = sl.filter(x => x.actif);
+      actifs.forEach(x => { if (x.date >= cfg.debutDecompte) total++; });
+      if (actifs.length && actifs.every(x => x.force)) { // semaine entièrement forcée
+        actifs.forEach(x => { if (codes.includes(x.force) && x.date >= cfg.debutDecompte) init[x.force]++; });
+        const j = sl[1];
+        prev0 = j.actif && codes.includes(j.force) ? j.force : null;
+        continue;
+      }
+      etapes.push(sl.map(x => {
+        if (!x.actif) return Object.assign(x, { options: [null] });
+        if (x.force) return Object.assign(x, { options: [x.force] });
+        const rep = addDays(x.date, REPORT_BLOC[x.id].offset);
+        const blocs = (cfg.libMap[x.date] || []).concat(cfg.feries[rep] ? [] : [rep]);
+        const ok = codes.filter(t => !indispo[t].has(x.date) && !blocs.some(b => indispo[t].has(b)));
+        return Object.assign(x, { options: ok.concat([AUTRE]) });
+      }));
+    }
+    if (!etapes.length) return null;
+    const cible = {};
+    codes.forEach(t => { cible[t] = cfg.shareOf[t] * total; });
+    const mini = {};
+    cfg.titulaires.forEach(t => { if (t.part != null) mini[t.code] = minimumPart(t.part, total); });
+    const evalue = (n, autre) => {
+      let manque = 0, ecart = 0;
+      codes.forEach((t, i) => {
+        if (mini[t] != null) manque += Math.max(0, mini[t] - n[i]);
+        ecart += (n[i] - cible[t]) ** 2;
+      });
+      return [manque, autre, Math.round(ecart * 1e6)];
+    };
+    // états : clé = MAR du jeudi-C1 précédent + compteurs ; on garde le moins d'"Autre MAR"
+    let etats = new Map();
+    etats.set(prev0 + '|' + codes.map(t => init[t]).join(','), { prev: prev0, n: codes.map(t => init[t]), autre: 0, choix: [] });
+    const FAISCEAU = codes.length <= 4 ? 4000 : 1200; // borne le nombre d'états gardés (rapidité)
+    etapes.forEach(([mar, jeu]) => {
+      const suivants = new Map();
+      etats.forEach(e => {
+        mar.options.forEach(m => {
+          if (m && m !== AUTRE && !mar.force && m === e.prev) return; // au bloc le mardi (report du jeudi-C1)
+          jeu.options.forEach(j => {
+            if (m && j && m !== AUTRE && m === j) return;              // pas mardi ET jeudi-C1
+            const n = e.n.slice();
+            let autre = e.autre;
+            [[mar, m], [jeu, j]].forEach(([x, v]) => {
+              if (!v || x.date < cfg.debutDecompte) return;
+              if (v === AUTRE) autre++;
+              const k = codes.indexOf(v);
+              if (k >= 0) n[k]++;
+            });
+            const prev = j && codes.includes(j) ? j : null;
+            const cle = prev + '|' + n.join(',');
+            const vu = suivants.get(cle);
+            if (!vu || autre < vu.autre) suivants.set(cle, { prev, n, autre, choix: e.choix.concat([[mar.date, m], [jeu.date, j]]) });
+          });
+        });
+      });
+      etats = suivants;
+      if (etats.size > FAISCEAU) {
+        const tri = [...etats.entries()].map(x => [x, evalue(x[1].n, x[1].autre)])
+          .sort((a, b) => a[1][1] - b[1][1] || a[1][0] - b[1][0] || a[1][2] - b[1][2]);
+        etats = new Map(tri.slice(0, FAISCEAU).map(x => x[0]));
+      }
+    });
+    let meilleur = null, cleMeilleur = null;
+    etats.forEach(e => {
+      const k = evalue(e.n, e.autre);
+      if (!cleMeilleur || lexLess(k, cleMeilleur)) { meilleur = e; cleMeilleur = k; }
+    });
+    const plan = {};
+    meilleur.choix.forEach(([d, v]) => { if (v) plan[d] = v; });
+    Object.defineProperty(plan, '_autre', { value: meilleur.autre });
+    return plan;
+  }
+
   // Libérales du décompte (à partir de debutDecompte) : total et par praticien.
   function comptesLiberales(result) {
     const { config: cfg, weeks } = result;
@@ -231,11 +339,15 @@
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
         info.force = !info.ferie && !info.horsPeriode && forces[s.id] ? forces[s.id] : null;
         info.blocs = SLOT_LIBERALE[s.dow] === s.id ? (cfg.libMap[date] || []) : [];
+        // Jour de bloc de report (mardi → lundi suivant, jeudi-C1 → mardi suivant), sauf férié
+        const rep = REPORT_BLOC[s.id] ? addDays(date, REPORT_BLOC[s.id].offset) : null;
+        info.reportBloc = rep && !cfg.feries[rep] ? rep : null;
         info.exclus = {};
         codes.forEach(t => {
           const absent = info.blocs.find(b => indispo[t].has(b));
           if (indispo[t].has(date)) info.exclus[t] = 'Indisponible';
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
+          else if (info.reportBloc && indispo[t].has(info.reportBloc)) info.exclus[t] = `Indisponible le ${labelFR(info.reportBloc)} (jour de bloc de report)`;
           else if (absent) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc d'un patient libéral)`;
         });
         return info;
@@ -373,7 +485,13 @@
       const v = [1, 2, 3].reduce((a, p) => a + cum[t][p] + add[t][p], 0);
       return acc + v * v;
     }, 0);
+    // Écarts au plan optimal des libérales
+    let horsPlan = 0;
+    if (cfg.plan) ctx.forEach((c, i) => {
+      if (c.slot.prio === 1 && cfg.plan[c.date] !== undefined && cur[i] !== cfg.plan[c.date]) horsPlan++;
+    });
     return [
+      horsPlan,
       autre[1], Math.round(balLib * 1e6) / 1e6, bal(1),
       autre[2] + autre[3],
       depassement,
@@ -434,6 +552,13 @@
 
     const byDate = {};
     weeks.forEach(w => SLOTS.forEach(s => { const c = w.slots[s.id]; (byDate[c.date] = byDate[c.date] || []).push(c); }));
+    // Report de bloc : le MAR du mardi / jeudi-C1 doit être disponible le jour de son bloc
+    weeks.forEach(w => Object.keys(REPORT_BLOC).forEach(id => {
+      const c = w.slots[id];
+      if (!isTit(c.med)) return;
+      const b = addDays(c.date, REPORT_BLOC[id].offset);
+      if (!cfg.feries[b] && indispo[c.med].has(b)) add(`${labelFR(c.date)} ${id === 'mar' ? 'Mardi' : 'Jeu. C1'} : ${c.med} est au bloc le ${labelFR(b)} (report) mais indisponible ce jour-là`, c);
+    }));
     // Patients libéraux : le MAR de la consultation doit être libre le jour du bloc
     weeks.forEach(w => SLOTS.forEach(s => {
       const c = w.slots[s.id];

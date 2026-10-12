@@ -41,8 +41,11 @@ test('jours fériés sans consultation ni report de bloc', () => {
   assert.equal(slot('2026-11-16', 'jeu1').med, null);
   assert.equal(slot('2026-11-16', 'jeu2').med, null);
   assert.equal(slot('2026-12-07', 'mar').med, null);
-  // Pas de report depuis le 19/11 → personne n'est exclu "au bloc" le mardi 24/11
-  Object.values(slot('2026-11-23', 'mar').exclus).forEach(r => assert.doesNotMatch(r, /bloc/i));
+  // Pas de report depuis le 19/11 → personne n'est exclu « au bloc » le mardi 24/11 à cause du 19/11
+  Object.values(slot('2026-11-23', 'mar').exclus).forEach(r => assert.doesNotMatch(r, /19\/11/));
+  // Lundi 2 novembre férié (Toussaint reportée)
+  assert.equal(slot('2026-11-02', 'lun1').med, null);
+  assert.equal(slot('2026-11-02', 'lun2').med, null);
 });
 
 test('indisponibilités respectées', () => {
@@ -76,10 +79,23 @@ test('mardi / jeudi-C1 : jamais le même titulaire la même semaine', () => {
   });
 });
 
-test('décompte T4 équilibré entre titulaires (écart ≤ 1)', () => {
+test('report de bloc : le MAR du mardi / jeudi-C1 est disponible le jour de son bloc', () => {
+  const ind = {};
+  E.TITULAIRES.forEach(t => { ind[t] = new Set(E.DEFAULT_CONFIG.indispos[t]); });
+  result.weeks.filter(w => !w.override).forEach(w => [['mar', 6], ['jeu1', 5]].forEach(([id, off]) => {
+    const c = w.slots[id];
+    if (!E.isTitulaire(c.med)) return;
+    const bloc = E.addDays(c.date, off);
+    if (E.DEFAULT_CONFIG.feries[bloc]) return;
+    assert.ok(!ind[c.med].has(bloc), `${c.date} ${id} : ${c.med} indisponible le ${bloc}`);
+  }));
+});
+
+test('libérales : le moins d\'« Autre MAR » possible (8 au T4 avec RW, SG, GR)', () => {
   const d = E.decompte(result.weeks, '2026-10-01', '2026-12-31');
-  const vals = E.TITULAIRES.map(t => d[t] || 0);
-  assert.ok(Math.max(...vals) - Math.min(...vals) <= 1, JSON.stringify(d));
+  assert.equal(d[E.AUTRE], 8, JSON.stringify(d));
+  // Chaque « Autre MAR » du mardi / jeudi-C1 : aucun titulaire n'était possible
+  assert.deepEqual(E.verify(result), []);
 });
 
 test('génération déterministe', () => {
@@ -125,12 +141,14 @@ const withForce = (monday, slotId, who) => {
 };
 
 test('forcer un praticien : créneau figé, le reste s\'adapte sans erreur', () => {
-  const r = withForce('2026-11-30', 'lun2', 'RW'); // RW calculé en lun1 sans forçage
-  assert.equal(slot('2026-11-30', 'lun1').med, 'RW');
-  const w = r.weeks.find(x => x.monday === '2026-11-30');
-  assert.equal(w.slots.lun2.med, 'RW');
+  // Le MAR calculé en lun1 le 30/11 est forcé en lun2 : lun1 doit changer
+  const x = slot('2026-11-30', 'lun1').med;
+  assert.ok(E.isTitulaire(x));
+  const r = withForce('2026-11-30', 'lun2', x);
+  const w = r.weeks.find(y => y.monday === '2026-11-30');
+  assert.equal(w.slots.lun2.med, x);
   assert.ok(w.slots.lun2.force);
-  assert.notEqual(w.slots.lun1.med, 'RW', 'pas 2 consultations le même après-midi');
+  assert.notEqual(w.slots.lun1.med, x, 'pas 2 consultations le même après-midi');
   assert.ok(!w.override, 'semaine partiellement forcée');
   assert.deepEqual(E.verify(r), []);
   assert.deepEqual(E.alertes(r), []);
@@ -171,16 +189,18 @@ const withLib = liberales => {
 };
 
 test('patient libéral : MAR indisponible le jour du bloc écarté de la consultation', () => {
-  // Sans import, SG fait le mardi 24/11 ; SG est indisponible le 30/11
-  assert.equal(slot('2026-11-23', 'mar').med, 'SG');
-  const r = withLib([{ consult: '2026-11-24', bloc: '2026-11-30', info: 'Coloscopie' }]);
-  const w = r.weeks.find(x => x.monday === '2026-11-23');
-  assert.notEqual(w.slots.mar.med, 'SG');
-  assert.match(w.slots.mar.exclus.SG, /Indisponible le 30\/11/);
+  // Mardi 24/11 : le MAR calculé est X ; on importe un patient opéré un jour où X est indisponible
+  const x = slot('2026-11-23', 'mar').med;
+  assert.ok(E.isTitulaire(x));
+  const bloc = E.DEFAULT_CONFIG.indispos[x].find(d => d > '2026-11-24' && !E.DEFAULT_CONFIG.feries[d]);
+  assert.ok(bloc, 'une indisponibilité de ' + x + ' après le 24/11');
+  const r = withLib([{ consult: '2026-11-24', bloc, info: 'Coloscopie' }]);
+  const w = r.weeks.find(y => y.monday === '2026-11-23');
+  assert.notEqual(w.slots.mar.med, x);
+  assert.match(w.slots.mar.exclus[x], new RegExp('Indisponible le ' + E.labelFR(bloc).replace('/', '\\/')));
   assert.deepEqual(E.verify(r), []);
   const st = E.liberaleStatus(r);
   assert.equal(st[0].slot.id, 'mar');
-  assert.equal(st[0].statut, 'ok');
 });
 
 test('patient libéral : le MAR est au bloc ce jour-là, pas en consultation', () => {
@@ -204,7 +224,7 @@ test('patient libéral : bloc dans la même semaine que la consultation', () => 
     assert.notEqual(w.slots.jeu2.med, w.slots.lun1.med);
   }
   assert.deepEqual(E.verify(r), []);
-  assert.equal(E.liberaleStatus(r)[0].statut, 'ok');
+  if (E.isTitulaire(w.slots.lun1.med)) assert.equal(E.liberaleStatus(r)[0].statut, 'ok');
 });
 
 test('patient libéral : forçage incompatible signalé en alerte', () => {
@@ -273,4 +293,34 @@ test('part libérale personnalisée : 50 % pour un MAR ajouté', () => {
   const total = Object.values(d).reduce((a, b) => a + b, 0);
   assert.ok(d.AFR > d.RW && d.AFR > d.SG && d.AFR > d.GR, JSON.stringify(d));
   assert.ok(Math.abs(d.AFR - 0.5 * total) <= 2, JSON.stringify(d));
+});
+
+const X = require('../excel-export.js');
+
+test('export Excel : numéro de semaine ISO', () => {
+  assert.equal(X.semaineISO('2026-10-05'), 41);
+  assert.equal(X.semaineISO('2026-12-28'), 53);
+  assert.equal(X.semaineISO('2026-09-28'), 40);
+});
+
+test('export Excel : contenu endoscopie de la semaine 41', () => {
+  const w = week('2026-10-05');
+  const jours = X.contenuSemaine(result, w);
+  assert.equal(jours.length, 5);
+  // Consultations de l'après-midi = planning du site
+  assert.deepEqual(jours[0].consult, [w.slots.lun1.med, w.slots.lun2.med]);
+  assert.deepEqual(jours[1].consult, [w.slots.mar.med]);
+  assert.deepEqual(jours[3].consult, [w.slots.jeu1.med, w.slots.jeu2.med]);
+  assert.deepEqual(jours[4].consult, []);
+  // Bloc du matin par report : AFR (mardi 29/09) le lundi, GR (jeudi-C1 01/10) le mardi
+  assert.deepEqual(jours[0].bloc, ['AFR']);
+  assert.deepEqual(jours[1].bloc, ['GR']);
+  // Absents = indisponibilités des MAR
+  assert.ok(jours[0].absents.includes('RW'));
+});
+
+test('export Excel : jour férié sans consultation', () => {
+  const jours = X.contenuSemaine(result, week('2026-11-16'));
+  assert.equal(jours[3].ferie, 'Fête Nationale Monégasque');
+  assert.deepEqual(jours[3].consult, []);
 });

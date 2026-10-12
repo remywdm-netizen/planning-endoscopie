@@ -165,6 +165,7 @@ td.l{text-align:left}
     <button class="tab on" id="tab-planning" onclick="showTab('planning')">📅 Planning</button>
     <button class="tab" id="tab-indispos" onclick="showTab('indispos')">🚫 Indisponibilités</button>
     <button class="tab" id="tab-lib" onclick="showTab('lib')">📥 Consult. libérales</button>
+    <button class="tab" id="tab-xls" onclick="showTab('xls')">📊 Planning Excel</button>
     <button class="tab" id="tab-mar" onclick="showTab('mar')">👨‍⚕️ MAR</button>
   </div>
 
@@ -231,6 +232,26 @@ td.l{text-align:left}
     <div class="tbl-wrap"><table id="lib-tbl" style="min-width:680px"></table></div>
   </div>
 
+  <!-- ── PLANNING EXCEL ── -->
+  <div class="view" id="view-xls">
+    <p class="hint">Génère le planning hebdomadaire du service au format de votre modèle Excel, une feuille par semaine, avec la partie endoscopie remplie depuis ce site. Sont remplis : la ligne <b>Consultations d'anesthésie → ENDOSCOPIES</b> (l'après-midi), la ligne <b>ENDOSCOPIES</b> du bloc le matin (MAR au bloc par report : praticien du mardi le lundi suivant, du jeudi-C1 le mardi suivant, et patients libéraux), les <b>ABSENTS</b> (indisponibilités des MAR), les dates, le n° de semaine et les jours fériés. Les autres lignes (viscéral, ortho, gardes…) sont laissées vides ; la mise en forme, les formules et l'annuaire du modèle sont conservés.</p>
+    <label class="drop" id="xls-drop">
+      <input type="file" id="xls-file" accept=".xlsx,.xlsm" style="display:none" onchange="xlsModele(this.files[0]);this.value=''"/>
+      📄 <b>Choisir le modèle Excel</b> (ex. « Planning semaine 41.xlsx ») ou le glisser ici
+      <div id="xls-src" style="margin-top:6px;font-size:12px"></div>
+    </label>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b>Semaines à générer</b>
+        <button class="btn" onclick="xlsTout(true)">Tout cocher</button>
+        <button class="btn" onclick="xlsTout(false)">Tout décocher</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-g" id="xls-go" onclick="xlsGenerer()">⬇ Générer le fichier Excel</button>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table id="xls-tbl" style="min-width:760px"></table></div>
+  </div>
+
   <!-- ── MAR ── -->
   <div class="view" id="view-mar">
     <p class="hint">Les MAR titulaires (2 à 6) assurent obligatoirement le mardi et le jeudi-Consult. 1 et se partagent toutes les consultations. Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
@@ -253,6 +274,7 @@ td.l{text-align:left}
 </div>
 
 <script src="lib/xlsx.full.min.js"></script>
+<script src="excel-export.js"></script>
 <script src="consultations-engine.js"></script>
 <script>
 const E = window.ConsultEngine;
@@ -691,12 +713,99 @@ function exportCSV(){
   a.click();
 }
 
+// ── Planning Excel (modèle du service) ───────────────────────
+// Le modèle reste dans ce navigateur (il contient l'annuaire du service) : jamais publié.
+const XLS_KEY=STORE_KEY+'_modele';
+let xlsModeleData=null, xlsModeleNom='', xlsSel=null;
+function b64(buf){let s='';const u=new Uint8Array(buf);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);}
+function unb64(t){const s=atob(t);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer;}
+function chargerExcelJS(){
+  if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  return new Promise((ok,ko)=>{const sc=document.createElement('script');sc.src='lib/exceljs.min.js';sc.onload=()=>ok(window.ExcelJS);sc.onerror=()=>ko(new Error('Outil Excel non chargé'));document.head.appendChild(sc);});
+}
+async function xlsVerifier(buf){
+  const ExcelJS=await chargerExcelJS();
+  const wb=new ExcelJS.Workbook();await wb.xlsx.load(buf);
+  const ws=wb.worksheets[wb.worksheets.length-1];
+  ExcelExport.lireModele(ws);
+  return ws.name;
+}
+function xlsModele(f){
+  if(!f) return;
+  const rd=new FileReader();
+  rd.onload=async()=>{
+    try{
+      const feuille=await xlsVerifier(rd.result);
+      xlsModeleData=rd.result; xlsModeleNom=`${f.name} — feuille modèle « ${feuille} »`;
+      let memo=true;
+      try{localStorage.setItem(XLS_KEY,JSON.stringify({nom:xlsModeleNom,data:b64(rd.result)}));}catch(e){memo=false;}
+      renderXls();
+      toast(memo?'✅ Modèle chargé et mémorisé dans ce navigateur':'✅ Modèle chargé (trop gros pour être mémorisé)');
+    }catch(e){toast('⚠️ '+e.message);document.getElementById('xls-src').textContent='⚠️ '+e.message;}
+  };
+  rd.readAsArrayBuffer(f);
+}
+function xlsOublier(){
+  xlsModeleData=null;xlsModeleNom='';
+  try{localStorage.removeItem(XLS_KEY);}catch(e){}
+  renderXls();
+}
+function xlsSemaines(){return result.weeks.filter(w=>!w.override);}
+function xlsTout(v){xlsSel=new Set(v?xlsSemaines().map(w=>w.monday):[]);renderXls();}
+function xlsCoche(m,v){if(v)xlsSel.add(m);else xlsSel.delete(m);}
+function renderXls(){
+  if(!xlsModeleData){try{const m=JSON.parse(localStorage.getItem(XLS_KEY)||'null');if(m){xlsModeleData=unb64(m.data);xlsModeleNom=m.nom;}}catch(e){}}
+  document.getElementById('xls-src').innerHTML=xlsModeleData
+    ?`✅ ${esc(xlsModeleNom)} <button class="btn btn-r" style="margin-left:8px;padding:2px 10px" onclick="event.preventDefault();xlsOublier()">Oublier ce modèle</button>`
+    :'<span style="color:var(--red)">Aucun modèle chargé</span>';
+  const sem=xlsSemaines();
+  if(!xlsSel) xlsSel=new Set(sem.map(w=>w.monday));
+  const J=['Lun','Mar','Mer','Jeu','Ven'];
+  let h=`<thead><tr><th></th><th class="l">Semaine</th>${J.map(j=>`<th>${j}</th>`).join('')}</tr></thead><tbody>`;
+  sem.forEach(w=>{
+    const jours=ExcelExport.contenuSemaine(result,w);
+    h+=`<tr><td><input type="checkbox" ${xlsSel.has(w.monday)?'checked':''} onchange="xlsCoche('${w.monday}',this.checked)" aria-label="Semaine ${ExcelExport.semaineISO(w.monday)}"/></td>
+      <td class="l" style="white-space:nowrap"><b>S${ExcelExport.semaineISO(w.monday)}</b> <span style="color:var(--t3)">${weekLabel(w.monday)}</span></td>`;
+    jours.forEach(j=>{
+      if(j.ferie){h+=`<td class="ferie">Férié</td>`;return;}
+      const c=j.consult.filter(Boolean), b=j.bloc, a=j.absents;
+      h+=`<td style="font-size:11px;text-align:left;line-height:1.5">${c.length?`<div>🩺 ${c.map(esc).join(' / ')}</div>`:''}${b.length?`<div>🔬 bloc ${b.map(esc).join(', ')}</div>`:''}${a.length?`<div style="color:var(--t3)">absent ${a.map(esc).join(', ')}</div>`:''}</td>`;
+    });
+    h+='</tr>';
+  });
+  document.getElementById('xls-tbl').innerHTML=h+`</tbody>`;
+}
+async function xlsGenerer(){
+  if(!xlsModeleData){toast('Charger d\'abord le modèle Excel');return;}
+  const mondays=xlsSemaines().map(w=>w.monday).filter(m=>xlsSel.has(m));
+  if(!mondays.length){toast('Cocher au moins une semaine');return;}
+  const btn=document.getElementById('xls-go');btn.disabled=true;btn.textContent='⏳ Génération…';
+  try{
+    const ExcelJS=await chargerExcelJS();
+    const {buffer,resume}=await ExcelExport.generer(ExcelJS,xlsModeleData.slice(0),result,mondays);
+    const n=resume.map(r=>r.semaine);
+    const nom=n.length===1?`Planning semaine ${n[0]}.xlsx`:`Planning semaines ${n[0]}-${n[n.length-1]}.xlsx`;
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    a.download=nom;a.click();
+    toast(`✅ ${nom} (${n.length} feuille(s))`);
+  }catch(e){toast('⚠️ '+e.message);}
+  finally{btn.disabled=false;btn.textContent='⬇ Générer le fichier Excel';}
+}
+(function(){
+  const dz=document.getElementById('xls-drop');
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
+  dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])xlsModele(e.dataTransfer.files[0]);});
+})();
+
 function changed(){
   saveConfig();
   recompute();
   renderIndispos();
   renderMars();
   renderLib();
+  renderXls();
 }
 
 // ── Consultations libérales (import Excel) ──────────────────
@@ -853,6 +962,7 @@ recompute();
 renderIndispos();
 renderMars();
 renderLib();
+renderXls();
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
