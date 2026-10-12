@@ -11,7 +11,7 @@ Adresse : `https://remywdm-netizen.github.io/planning-endoscopie/`
 | `lib/xlsx.full.min.js` | Lecteur Excel (SheetJS 0.18.5, licence Apache-2.0), embarqué pour fonctionner sans CDN |
 | `tests/consultations.test.js` | Vérification automatique des règles (`node --test tests/*.test.js`) |
 
-Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités (GR : au moins 30 % des consultations libérales), fériés monégasques 19/11 et 08/12, overrides de la semaine du 28/09.
+Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant ; le MAR doit être disponible ce jour de bloc, sinon il ne peut pas faire la consultation), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités (GR : au moins 30 % des consultations libérales), fériés 02/11 (Toussaint reportée), 19/11 et 08/12, overrides de la semaine du 28/09.
 
 Onglets de la page :
 - **📅 Planning** : planning hebdomadaire, décompte, totaux, export CSV. **Cliquer sur une case** pour forcer un praticien (titulaire, « Autre MAR » ou praticien externe comme AFR) ou revenir au calcul automatique. Un créneau forcé est conservé même hors règles (une alerte l'indique) et les autres créneaux sont recalculés autour.
