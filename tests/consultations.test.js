@@ -340,3 +340,33 @@ test('indisponibilités d\'AFR en novembre (dont repos le 27/11)', () => {
     if (c.med === 'AFR' && !w.override) assert.ok(!ind.has(c.date), c.date);
   }));
 });
+
+test('fermer un créneau : pas de consultation, ni décompte, ni report de bloc', () => {
+  const avant = slot('2026-11-23', 'mar').med;
+  assert.ok(E.isTitulaire(avant));
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.overrides['2026-11-23'] = { mar: E.FERME };
+  const r = E.generate(cfg);
+  const w = r.weeks.find(x => x.monday === '2026-11-23');
+  assert.equal(w.slots.mar.med, null);
+  assert.ok(w.slots.mar.ferme);
+  assert.ok(!w.override, 'les autres créneaux restent calculés');
+  assert.ok(w.slots.jeu1.med, 'jeudi-C1 toujours attribué');
+  assert.deepEqual(E.verify(r), []);
+  assert.deepEqual(E.alertes(r), []);
+  // Plus de report de bloc depuis ce mardi : personne n'est « au bloc » le lundi 30/11 à cause du 24/11
+  const lun = r.weeks.find(x => x.monday === '2026-11-30').slots.lun1;
+  Object.values(lun.exclus).forEach(x => assert.doesNotMatch(x, /Mardi du 24\/11/));
+  // Décompte : une libérale de moins
+  const tot = res => Object.values(E.decompte(res.weeks, '2026-10-01', '2026-12-31')).reduce((a, b) => a + b, 0);
+  assert.equal(tot(r), tot(result) - 1);
+});
+
+test('patient libéral vu un jour où le créneau est fermé : alerte', () => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.overrides['2026-11-23'] = { mar: E.FERME };
+  cfg.liberales = [{ consult: '2026-11-24', bloc: '2026-12-01' }];
+  const st = E.liberaleStatus(E.generate(cfg));
+  assert.equal(st[0].statut, 'alerte');
+  assert.match(st[0].raison, /fermé/);
+});
