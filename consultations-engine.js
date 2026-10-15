@@ -7,6 +7,8 @@
   'use strict';
 
   const AUTRE = 'Autre MAR';
+  // Valeur d'un créneau forcé « fermé » : pas de consultation ce jour-là
+  const FERME = 'FERMÉ';
 
   // Créneaux de consultation (après-midi). dow : 0 = lundi … 3 = jeudi.
   // prio 1 = mardi + jeudi-C1 (comptés au décompte)
@@ -213,7 +215,7 @@
       const sl = ['mar', 'jeu1'].map(id => {
         const s = SLOTS.find(x => x.id === id);
         const date = addDays(monday, s.dow);
-        const actif = !cfg.feries[date] && date <= cfg.end;
+        const actif = !cfg.feries[date] && date <= cfg.end && forces[id] !== FERME;
         return { id, date, actif, force: actif && forces[id] ? forces[id] : null };
       });
       const actifs = sl.filter(x => x.actif);
@@ -347,7 +349,8 @@
       const ctx = SLOTS.map(s => {
         const date = addDays(monday, s.dow);
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
-        info.force = !info.ferie && !info.horsPeriode && forces[s.id] ? forces[s.id] : null;
+        info.ferme = !info.ferie && !info.horsPeriode && forces[s.id] === FERME;
+        info.force = !info.ferie && !info.horsPeriode && !info.ferme && forces[s.id] ? forces[s.id] : null;
         info.blocs = SLOT_LIBERALE[s.dow] === s.id ? (cfg.libMap[date] || []) : [];
         // Jour de bloc de report (mardi → lundi suivant, jeudi-C1 → mardi suivant), sauf férié
         const rep = REPORT_BLOC[s.id] ? addDays(date, REPORT_BLOC[s.id].offset) : null;
@@ -363,7 +366,7 @@
         return info;
       });
 
-      const actifs = ctx.filter(c => !c.ferie && !c.horsPeriode);
+      const actifs = ctx.filter(c => !c.ferie && !c.horsPeriode && !c.ferme);
       week.override = actifs.length > 0 && actifs.every(c => c.force);
       const choice = bestWeek(ctx, cum, cfg);
 
@@ -374,6 +377,7 @@
           med: who,
           ferie: c.ferie,
           horsPeriode: c.horsPeriode,
+          ferme: c.ferme,
           exclus: c.exclus,
           blocs: c.blocs,
           force: !!c.force,
@@ -405,7 +409,7 @@
   function bestWeek(ctx, cum, cfg) {
     const codes = cfg.codes;
     const cands = ctx.map(c => {
-      if (c.ferie || c.horsPeriode) return [null];
+      if (c.ferie || c.horsPeriode || c.ferme) return [null];
       if (c.force) return [c.force];
       return codes.filter(t => !c.exclus[t]).concat([AUTRE]);
     });
@@ -586,7 +590,7 @@
         const c = w.slots[s.id];
         const who = c.med;
         if (c.ferie && who) add(`${c.date} férié mais attribué à ${who}`, c);
-        if (!c.ferie && !c.horsPeriode && !who) add(`${c.date} ${s.label} non attribué`, c);
+        if (!c.ferie && !c.horsPeriode && !c.ferme && !who) add(`${c.date} ${s.label} non attribué`, c);
         if (!who || !isTit(who)) return;
         (cellsOf[who] = cellsOf[who] || []).push(c);
         if (indispo[who].has(c.date)) add(`${labelFR(c.date)} ${s.label} : ${who} indisponible`, c);
@@ -645,6 +649,7 @@
       const c = day.find(x => x.slot.id === SLOT_LIBERALE[x.slot.dow]);
       res.slot = c.slot;
       res.med = c.med;
+      if (c.ferme) { res.statut = 'alerte'; res.raison = 'créneau de consultation fermé ce jour-là'; return res; }
       if (l.bloc <= l.consult) { res.statut = 'alerte'; res.raison = 'date de bloc antérieure ou égale à la consultation'; return res; }
       if (!isTit(c.med)) { res.statut = 'alerte'; res.raison = `${c.med || 'personne'} en consultation : vérifier sa présence au bloc le ${labelFR(l.bloc)}`; return res; }
       if (indispo[c.med].has(l.bloc)) { res.statut = 'alerte'; res.raison = `${c.med} indisponible le ${labelFR(l.bloc)}`; return res; }
@@ -662,7 +667,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, SLOTS, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, FERME, SLOTS, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };

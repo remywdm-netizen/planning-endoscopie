@@ -402,9 +402,13 @@ function renderForces(){
   const al=E.alertes(result);
   let h='';
   if(al.length) h+=`<div class="ok info">📌 Forçage(s) en dehors des règles (choix manuel conservé) :<br/>${al.map(esc).join('<br/>')}</div>`;
-  if(list.length){
-    h+=`<div class="ok info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">📌 ${list.length} créneau(x) forcé(s) : ${list.map(f=>`${esc(f.who)} ${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')}
-      <button class="btn btn-r" style="margin-left:auto" onclick="clearForces()">Retirer tous les forçages</button></div>`;
+  const fermes=list.filter(f=>f.who===E.FERME), forces=list.filter(f=>f.who!==E.FERME);
+  if(fermes.length) h+=`<div class="ok info">🚫 ${fermes.length} créneau(x) fermé(s) : ${fermes.map(f=>`${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')} — cliquer sur la case puis « Automatique » pour rouvrir.</div>`;
+  if(forces.length){
+    h+=`<div class="ok info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">📌 ${forces.length} créneau(x) forcé(s) : ${forces.map(f=>`${esc(f.who)} ${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')}
+      <button class="btn btn-r" style="margin-left:auto" onclick="clearForces()">Retirer tous les forçages et fermetures</button></div>`;
+  }else if(fermes.length){
+    h+=`<div style="text-align:right;margin:-6px 0 12px"><button class="btn btn-r" onclick="clearForces()">Rouvrir tous les créneaux fermés</button></div>`;
   }
   document.getElementById('forces').innerHTML=h;
 }
@@ -418,7 +422,7 @@ function openForce(monday,slotId){
   if(c.ferie||c.horsPeriode) return;
   forceCtx={monday,slotId};
   const forced=(cfg.overrides[monday]||{})[slotId]||null;
-  document.getElementById('modal-title').innerHTML=`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.med?esc(c.med):'—'}${forced?' (forcé)':' (automatique)'}</small>`;
+  document.getElementById('modal-title').innerHTML=`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.ferme?'fermé':(c.med?esc(c.med):'—')+(forced?' (forcé)':' (automatique)')}</small>`;
   const notes=code=>{
     const n=[];
     if(c.exclus[code]) n.push(c.exclus[code]);
@@ -431,13 +435,14 @@ function openForce(monday,slotId){
     if(t&&nb>=(t.max||cfg.cap)) n.push(`déjà ${nb} consultations cette semaine`);
     return n;
   };
-  const extCur=forced&&!codes().includes(forced)&&forced!==E.AUTRE?forced:'';
+  const extCur=forced&&!codes().includes(forced)&&forced!==E.AUTRE&&forced!==E.FERME?forced:'';
   let h=`<button class="opt${!forced?' cur':''}" onclick="setForce(null)">🔄 <b>Automatique</b><span class="opt-note">calcul selon les règles</span></button>`;
   cfg.titulaires.forEach(t=>{
     const n=notes(t.code);
     h+=`<button class="opt${forced===t.code?' cur':''}" onclick="setForce('${esc(t.code)}')">${chip(t.code)}<span class="opt-note${n.length?' warn':''}">${n.length?'⚠️ '+esc(n.join(' · ')):'disponible'}</span></button>`;
   });
   h+=`<button class="opt${forced===E.AUTRE?' cur':''}" onclick="setForce('${E.AUTRE}')">${chip(E.AUTRE)}<span class="opt-note">remplaçant non nommé</span></button>`;
+  h+=`<button class="opt${forced===E.FERME?' cur':''}" onclick="setForce('${E.FERME}')">🚫 <b>Fermer ce créneau</b><span class="opt-note">pas de consultation ce jour-là</span></button>`;
   h+=`<div class="opt-ext"><input id="opt-ext" maxlength="12" placeholder="Autre praticien (ex. AFR)" value="${esc(extCur)}" onkeydown="if(event.key==='Enter')setForceExt()"/><button class="btn btn-g" onclick="setForceExt()">Forcer</button></div>`;
   document.getElementById('modal-body').innerHTML=h;
   document.getElementById('modal').classList.add('on');
@@ -451,15 +456,15 @@ function setForce(who){
   if(Object.keys(ov).length) cfg.overrides[monday]=ov; else delete cfg.overrides[monday];
   closeForce();
   changed();
-  toast(who?`📌 ${who} forcé`:'🔄 Retour au calcul automatique');
+  toast(who===E.FERME?'🚫 Créneau fermé':who?`📌 ${who} forcé`:'🔄 Retour au calcul automatique');
 }
 function setForceExt(){
   const v=document.getElementById('opt-ext').value.trim().toUpperCase();
   if(!v){toast('Saisir les initiales du praticien');return;}
-  setForce(v==='AUTRE MAR'||v==='AUTRE'?E.AUTRE:v);
+  setForce(v==='AUTRE MAR'||v==='AUTRE'?E.AUTRE:(v==='FERME'||v==='FERMÉ'?E.FERME:v));
 }
 function clearForces(){
-  if(!confirm('Retirer tous les forçages (hors semaine de référence du 28/09) ?')) return;
+  if(!confirm('Retirer tous les forçages et rouvrir les créneaux fermés (hors semaine de référence du 28/09) ?')) return;
   const ref=E.DEFAULT_CONFIG.start;
   cfg.overrides=cfg.overrides[ref]?{[ref]:cfg.overrides[ref]}:{};
   changed();toast('Forçages retirés');
@@ -478,6 +483,7 @@ function renderPlan(){
     h+=`<tr${sep}><td class="wk">${weekLabel(w.monday)}<small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
     E.SLOTS.forEach(s=>{
       const c=w.slots[s.id];
+      if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫 Fermé<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
       const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
@@ -522,7 +528,8 @@ function renderRules(){
     <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
     <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
-    <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.`;
+    <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.<br/>
+    <b>Créneau fermé</b> : pas de consultation, pas de report de bloc, non compté dans le décompte (cliquer sur la case → « Fermer ce créneau »).`;
 }
 
 // ── Indisponibilités ────────────────────────────────────────
