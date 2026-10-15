@@ -324,3 +324,19 @@ test('export Excel : jour férié sans consultation', () => {
   assert.equal(jours[3].ferie, 'Fête Nationale Monégasque');
   assert.deepEqual(jours[3].consult, []);
 });
+
+test('indisponibilités d\'AFR en novembre (dont repos le 27/11)', () => {
+  assert.deepEqual(E.DEFAULT_CONFIG.indispos.AFR,
+    ['2026-11-03', '2026-11-09', '2026-11-16', '2026-11-18', '2026-11-20', '2026-11-23', '2026-11-27']);
+  assert.ok(!E.DEFAULT_CONFIG.indispos.GR.includes('2026-11-27'));
+  // AFR ajouté comme MAR : jamais en consultation ni au bloc de report un jour indisponible
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.titulaires.push({ code: 'AFR', couleur: '#0891b2', max: 2 });
+  const r = E.generate(cfg);
+  assert.deepEqual(E.verify(r), []);
+  const ind = new Set(cfg.indispos.AFR);
+  r.weeks.forEach(w => E.SLOTS.forEach(s => {
+    const c = w.slots[s.id];
+    if (c.med === 'AFR' && !w.override) assert.ok(!ind.has(c.date), c.date);
+  }));
+});
