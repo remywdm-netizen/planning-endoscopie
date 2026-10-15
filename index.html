@@ -287,6 +287,7 @@ const MOIS_LONG = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet'
 const CAL_MONTHS = [10,11,12];
 
 let cfg = loadConfig();
+setTimeout(()=>{ try{ if(localStorage.getItem(STORE_KEY)) saveConfig(); }catch(e){} }); // enregistre les mises à jour appliquées au chargement
 let result = null;
 let indMar = cfg.titulaires[0].code;
 
@@ -297,7 +298,7 @@ function loadConfig(){
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
       const saved = JSON.parse(raw);
-      if(validConfig(saved)) return cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG), saved));
+      if(validConfig(saved)) return cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG), {indisposV:1}, saved));
     }
   }catch(e){}
   return clone(E.DEFAULT_CONFIG);
@@ -312,6 +313,14 @@ function cleanCfg(c){
     if(gr&&gr.part==null) gr.part=30;
     c.partsV=1;
   }
+  // Indisponibilités ajoutées depuis (ex. AFR en novembre, repos de GR le 27/11)
+  const ajouts=E.DEFAULT_CONFIG.ajoutsIndispos||{};
+  Object.keys(ajouts).map(Number).sort((a,b)=>a-b).forEach(v=>{
+    if((c.indisposV||1)>=v) return;
+    c.indispos=Object.assign({},c.indispos);
+    Object.entries(ajouts[v]).forEach(([m,dates])=>{c.indispos[m]=[...new Set((c.indispos[m]||[]).concat(dates))].sort();});
+    c.indisposV=v;
+  });
   return c;
 }
 function validConfig(c){
@@ -321,7 +330,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, indisposV:cfg.indisposV||1};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -685,7 +694,7 @@ function importConfig(input){
     try{
       const c=JSON.parse(rd.result);
       if(!validConfig(c)) throw new Error('format');
-      cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),c));
+      cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},c));
       changed();toast('✅ Configuration importée');
     }catch(e){toast('⚠️ Fichier invalide');}
     input.value='';
