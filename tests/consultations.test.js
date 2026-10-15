@@ -325,10 +325,10 @@ test('export Excel : jour férié sans consultation', () => {
   assert.deepEqual(jours[3].consult, []);
 });
 
-test('indisponibilités d\'AFR (novembre) et repos de GR le 27/11', () => {
+test('indisponibilités d\'AFR en novembre (dont repos le 27/11)', () => {
   assert.deepEqual(E.DEFAULT_CONFIG.indispos.AFR,
-    ['2026-11-03', '2026-11-09', '2026-11-16', '2026-11-18', '2026-11-20', '2026-11-23']);
-  assert.ok(E.DEFAULT_CONFIG.indispos.GR.includes('2026-11-27'));
+    ['2026-11-03', '2026-11-09', '2026-11-16', '2026-11-18', '2026-11-20', '2026-11-23', '2026-11-27']);
+  assert.ok(!E.DEFAULT_CONFIG.indispos.GR.includes('2026-11-27'));
   // AFR ajouté comme MAR : jamais en consultation ni au bloc de report un jour indisponible
   const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
   cfg.titulaires.push({ code: 'AFR', couleur: '#0891b2', max: 2 });

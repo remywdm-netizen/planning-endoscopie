@@ -313,7 +313,7 @@ function cleanCfg(c){
     if(gr&&gr.part==null) gr.part=30;
     c.partsV=1;
   }
-  // Indisponibilités ajoutées depuis (ex. AFR en novembre, repos de GR le 27/11)
+  // Indisponibilités ajoutées depuis (ex. AFR en novembre, dont repos le 27/11)
   const ajouts=E.DEFAULT_CONFIG.ajoutsIndispos||{};
   Object.keys(ajouts).map(Number).sort((a,b)=>a-b).forEach(v=>{
     if((c.indisposV||1)>=v) return;

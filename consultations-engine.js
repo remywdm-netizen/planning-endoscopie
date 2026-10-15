@@ -65,12 +65,12 @@
       ],
       GR: [
         ...days(10, [14, 15, 16, 20]), // erratum : 14 et non 17
-        ...days(11, [3, 4, 5, 6, 9, 10, 11, 12, 13, 27]), // 27/11 : repos
+        ...days(11, [3, 4, 5, 6, 9, 10, 11, 12, 13]),
         ...days(12, [11, 28, 29, 30, 31]),
       ],
       // AFR : utilisé s'il est ajouté comme MAR (onglet MAR)
       AFR: [
-        ...days(11, [3, 9, 16, 18, 20, 23]),
+        ...days(11, [3, 9, 16, 18, 20, 23, 27]), // 27/11 : repos
       ],
     },
     // Patients libéraux importés : [{ consult: 'AAAA-MM-JJ', bloc: 'AAAA-MM-JJ', info }].
@@ -82,7 +82,7 @@
     // enregistrés dans le navigateur (version → { MAR: [dates] }).
     indisposV: 2,
     ajoutsIndispos: {
-      2: { AFR: days(11, [3, 9, 16, 18, 20, 23]), GR: days(11, [27]) },
+      2: { AFR: days(11, [3, 9, 16, 18, 20, 23, 27]) },
     },
     // Praticiens forcés, indexés par le lundi de la semaine puis par créneau.
     // Un créneau forcé n'est pas recalculé ; les autres s'adaptent autour.
