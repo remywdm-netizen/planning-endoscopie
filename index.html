@@ -78,6 +78,29 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .mar-btn{padding:5px 16px;border-radius:20px;border:2px solid var(--bd);background:var(--surf);cursor:pointer;font-size:13px;font-weight:700;font-family:var(--font)}
 .ind-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
 @media(max-width:800px){.ind-layout{grid-template-columns:1fr}}
+/* Libellés courts (téléphone) */
+.sh{display:none}
+@media(max-width:700px){
+  .lg{display:none}.sh{display:inline}
+  .bar{padding:8px 12px;position:static}.bar-sub{font-size:11px}.bar-right .btn{padding:4px 10px;font-size:12px}
+  .wrap{padding:12px 10px}
+  .tabs{flex-wrap:wrap;overflow:visible;gap:2px}
+  .tab{padding:6px 9px;font-size:13px}
+  h2{font-size:14px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  /* Planning : les 6 consultations tiennent dans l'écran */
+  #plan{min-width:0;table-layout:fixed}
+  #plan th,#plan td{padding:4px 1px;font-size:10px}
+  #plan th:first-child,#plan td.wk{width:42px;padding-left:4px}
+  #plan .chip{padding:1px 4px;font-size:10px}
+  #plan .cell-d,#plan td.wk small{display:none}
+  #plan .pres{font-size:11px}
+  .cellbtn.forced::after{font-size:7px}
+  .legend{gap:6px 12px;font-size:11px}
+  .modal-b .opt{padding:8px}
+  #totaux{min-width:0!important}
+  #totaux th,#totaux td{padding:5px 3px;font-size:11px;white-space:normal}
+}
 .cal-months{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .cal-block{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
 .cal-hdr-m{padding:8px 13px;background:var(--bg);border-bottom:1px solid var(--bd);font-weight:600;font-size:13px;display:flex;justify-content:space-between}
@@ -345,7 +368,7 @@ function colorOf(m){
 }
 function codes(){return cfg.titulaires.map(t=>t.code);}
 function chip(m){
-  if(m===E.AUTRE) return `<span class="chip autre">Autre MAR</span>`;
+  if(m===E.AUTRE) return `<span class="chip autre"><span class="lg">Autre MAR</span><span class="sh">Autre</span></span>`;
   return `<span class="chip" style="background:${colorOf(m)}">${esc(m)}</span>`;
 }
 function weekLabel(monday){return `${E.labelFR(monday)} → ${E.labelFR(E.addDays(monday,3))}`;}
@@ -472,18 +495,19 @@ function clearForces(){
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeForce();});
 
 function renderPlan(){
-  let h='<thead><tr><th style="text-align:left">Semaine</th>';
-  E.SLOTS.forEach(s=>{h+=`<th class="${s.prio===1?'p1':''}">${esc(s.label)}</th>`;});
+  const COURT={lun1:'Lun 1',lun2:'Lun 2',mar:'Mar',mer:'Mer',jeu1:'Jeu 1',jeu2:'Jeu 2'};
+  let h='<thead><tr><th style="text-align:left"><span class="lg">Semaine</span><span class="sh">Sem.</span></th>';
+  E.SLOTS.forEach(s=>{h+=`<th class="${s.prio===1?'p1':''}"><span class="lg">${esc(s.label)}</span><span class="sh">${COURT[s.id]}</span></th>`;});
   h+='</tr></thead><tbody>';
   let prevMonth=null;
   result.weeks.forEach(w=>{
     const m=Number(w.monday.slice(5,7));
     const sep=prevMonth!==null&&m!==prevMonth?' style="border-top:2px solid #b0c4de"':'';
     prevMonth=m;
-    h+=`<tr${sep}><td class="wk">${weekLabel(w.monday)}<small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
+    h+=`<tr${sep}><td class="wk"><span class="lg">${weekLabel(w.monday)}</span><span class="sh">${E.labelFR(w.monday)}</span><small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
     E.SLOTS.forEach(s=>{
       const c=w.slots[s.id];
-      if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫 Fermé<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
+      if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫<span class="lg"> Fermé</span><span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
       const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
@@ -492,7 +516,7 @@ function renderPlan(){
       const nb=(c.blocs||[]).length?(cfg.liberales||[]).filter(l=>l.consult===c.date&&l.bloc>l.consult).length:0;
       const pres=nb>0;
       const ptip=pres?`\n🩺 ${nb} patient(s) libéral(aux) — bloc le ${c.blocs.map(E.labelFR).join(', ')}`:'';
-      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺 ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span>`:''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
+      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺<span class="lg"> ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span></span>`:''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
     });
     h+='</tr>';
   });
