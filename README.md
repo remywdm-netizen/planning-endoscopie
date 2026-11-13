@@ -11,6 +11,7 @@ Adresse : `https://remywdm-netizen.github.io/planning-endoscopie/`
 | `lib/xlsx.full.min.js` | Lecteur Excel (SheetJS 0.18.5, licence Apache-2.0), embarqué pour fonctionner sans CDN |
 | `excel-export.js` | Remplissage du modèle Excel du service (onglet Planning Excel) |
 | `lib/exceljs.min.js` | ExcelJS 4.4.0 (licence MIT), chargé à la demande pour écrire l'Excel en gardant la mise en forme |
+| `google-sheet/Code.gs` | Script Apps Script à coller dans le Google Sheet (synchronisation) |
 | `tests/consultations.test.js` | Vérification automatique des règles (`node --test tests/*.test.js`) |
 
 Règles encodées : report de bloc (mardi → lundi suivant, jeudi-C1 → mardi suivant ; le MAR doit être disponible ce jour de bloc, sinon il ne peut pas faire la consultation), exclusivité RW/SG/GR sur mardi et jeudi-C1, plafond 2/semaine (RW jusqu'à 3 uniquement pour éviter un « Autre MAR »), équilibrage par priorités (GR : au moins 30 % des consultations libérales), fériés 02/11 (Toussaint reportée), 19/11 et 08/12, overrides de la semaine du 28/09.
@@ -22,4 +23,14 @@ Onglets de la page :
 - **📊 Planning Excel** : charger le modèle Excel du service (ex. « Planning semaine 41.xlsx »), cocher les semaines, puis **Générer** : un classeur avec une feuille par semaine (n° ISO), au format exact du modèle (mise en forme, formules, annuaire conservés). Sont remplis : Consultations d'anesthésie → ENDOSCOPIES, bloc ENDOSCOPIES du matin (report du mardi / jeudi-C1 et patients libéraux), ABSENTS (indisponibilités des MAR), dates, n° de semaine, jours fériés. Le modèle reste dans le navigateur : il n'est jamais publié.
 - **👨‍⚕️ MAR** : ajouter ou retirer un MAR titulaire (2 à 6), modifier ses initiales, sa couleur, son plafond hebdomadaire et sa **part minimale des consultations libérales** (mardi + jeudi-C1 ; GR : au moins 30 % par défaut, arrondi au créneau supérieur — 30 % de 25 → 8 ; les autres se partagent le reste à égalité ; alerte si le minimum est impossible). Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage du décompte. Un changement d'initiales est reporté sur les indisponibilités et les créneaux forcés.
 
-Les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).
+### ☁️ Synchronisation Google Sheet (onglet MAR)
+
+Toute la saisie se fait sur le site. Un Google Sheet connecté conserve les réglages (partagés par tous les postes) et affiche le planning (onglet « Planning ») et le décompte (onglet « Décompte »).
+
+1. Créer un Google Sheet, puis **Extensions → Apps Script** : coller `google-sheet/Code.gs` et remplacer `A-CHANGER` par un code secret.
+2. **Déployer → Nouveau déploiement → Application Web** ; exécuter en tant que « Moi », accès « Tout le monde » ; autoriser.
+3. Sur le site, onglet MAR → coller l'URL `…/exec` et le code secret → **Connecter** (sur chaque poste).
+
+Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouverture (la modification la plus récente l'emporte). Aucune identité patient n'est envoyée.
+
+Sans Google Sheet, les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).
