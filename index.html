@@ -299,6 +299,7 @@ td.l{text-align:left}
       <div class="row" style="margin-top:8px">
         <button class="btn" onclick="gsEnvoyer(true)">⬆ Envoyer maintenant</button>
         <button class="btn" onclick="gsCharger(true)">⬇ Recharger depuis le Sheet</button>
+        <button class="btn" onclick="gsCopierLien()">🔗 Copier le lien de connexion</button>
         <button class="btn btn-r" onclick="gsDeconnecter()">Déconnecter</button>
         <button class="btn" onclick="document.getElementById('gs-aide').hidden=!document.getElementById('gs-aide').hidden">❓ Mise en place</button>
       </div>
@@ -310,7 +311,7 @@ td.l{text-align:left}
           <li>En haut du script, remplacer <code>A-CHANGER</code> par un code secret de votre choix, puis enregistrer (💾).</li>
           <li><b>Déployer → Nouveau déploiement</b> → type <b>Application Web</b> ; « Exécuter en tant que » : <b>Moi</b> ; « Qui peut accéder » : <b>Tout le monde</b> → <b>Déployer</b>, puis autoriser l'accès à votre compte.</li>
           <li>Copier l'<b>URL de l'application Web</b> (se termine par <code>/exec</code>), la coller ci-dessus avec le code secret, puis <b>Connecter</b>.</li>
-          <li>Sur chaque autre poste : onglet MAR → coller la même adresse et le même code → <b>Connecter</b>.</li>
+          <li>Pour les autres postes et téléphones : cliquer <b>🔗 Copier le lien de connexion</b> et l'envoyer à l'équipe (SMS, e-mail). En ouvrant ce lien, le poste se connecte tout seul au Google Sheet.</li>
         </ol>
         <button class="btn" onclick="gsCopierScript()">📋 Copier le script</button>
         <span style="color:var(--t3);font-size:12px"> (aussi dans le dépôt : <code>google-sheet/Code.gs</code>)</span>
@@ -978,6 +979,30 @@ function gsDeconnecter(){
   document.getElementById('gs-local').textContent='Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).';
   gsEtat={msg:'',ok:null,quand:null};renderGs();
 }
+// Lien de connexion : adresse + code secret dans la partie « # » de l'adresse
+// (jamais envoyée au serveur ni publiée) ; ouvrir le lien connecte le poste.
+function gsLien(){
+  const jeton=btoa(unescape(encodeURIComponent(JSON.stringify({u:gs.url,c:gs.code})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return location.href.split('#')[0]+'#gs='+jeton;
+}
+async function gsCopierLien(){
+  if(!gsActif()){toast('Connecter d\'abord ce poste au Google Sheet');return;}
+  const lien=gsLien();
+  try{await navigator.clipboard.writeText(lien);toast('🔗 Lien copié : l\'envoyer à l\'équipe (il contient le code secret)');}
+  catch(e){prompt('Copier ce lien et l\'envoyer à l\'équipe :',lien);}
+}
+function gsLireLien(){
+  const m=location.hash.match(/^#gs=([A-Za-z0-9_-]+)$/);
+  if(!m) return false;
+  try{
+    const b=m[1].replace(/-/g,'+').replace(/_/g,'/');
+    const o=JSON.parse(decodeURIComponent(escape(atob(b+'==='.slice((b.length+3)%4)))));
+    if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(o.u)||!o.c) throw new Error();
+    gs={url:o.u,code:o.c};gsSauver();
+  }catch(e){toast('⚠️ Lien de connexion invalide');}
+  history.replaceState(null,'',location.href.split('#')[0]); // retire le code secret de la barre d'adresse
+  return gsActif();
+}
 async function gsCopierScript(){
   try{
     const r=await fetch('google-sheet/Code.gs');if(!r.ok)throw new Error();
@@ -1141,8 +1166,9 @@ renderIndispos();
 renderMars();
 renderLib();
 renderXls();
+const viaLien=gsLireLien();
 renderGs();
-if(gsActif()) gsCharger(false);
+if(gsActif()) gsCharger(false).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); });
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>

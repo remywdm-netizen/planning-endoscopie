@@ -29,7 +29,7 @@ Toute la saisie se fait sur le site. Un Google Sheet connecté conserve les rég
 
 1. Créer un Google Sheet, puis **Extensions → Apps Script** : coller `google-sheet/Code.gs` et remplacer `A-CHANGER` par un code secret.
 2. **Déployer → Nouveau déploiement → Application Web** ; exécuter en tant que « Moi », accès « Tout le monde » ; autoriser.
-3. Sur le site, onglet MAR → coller l'URL `…/exec` et le code secret → **Connecter** (sur chaque poste).
+3. Sur le site, onglet MAR → coller l'URL `…/exec` et le code secret → **Connecter**. Pour les autres postes : **🔗 Copier le lien de connexion** et l'envoyer à l'équipe ; ouvrir ce lien connecte le poste automatiquement.
 
 Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouverture (la modification la plus récente l'emporte). Aucune identité patient n'est envoyée.
 
