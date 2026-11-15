@@ -922,9 +922,15 @@ function gsTableaux(){
   return {planning,decompte};
 }
 async function gsAppel(corps){
-  const r=corps
-    ?await fetch(gs.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(corps)})
-    :await fetch(gs.url+(gs.url.includes('?')?'&':'?')+'code='+encodeURIComponent(gs.code)+'&_='+Date.now());
+  let r;
+  try{
+    r=corps
+      ?await fetch(gs.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(corps)})
+      :await fetch(gs.url+(gs.url.includes('?')?'&':'?')+'code='+encodeURIComponent(gs.code)+'&_='+Date.now());
+  }catch(e){
+    // Le script n'a pas répondu en JSON : réglage du déploiement Google le plus souvent
+    throw new Error('le script Google ne répond pas. Vérifier : adresse terminée par /exec ; déploiement « Application Web » avec accès « Tout le monde » (pas « Toute personne disposant d\'un compte Google ») ; accès autorisé au déploiement. Test : ouvrir l\'adresse /exec dans un onglet, elle doit afficher un texte commençant par {"ok"');
+  }
   if(!r.ok) throw new Error('Google Sheet injoignable ('+r.status+')');
   const j=await r.json();
   if(!j.ok) throw new Error(j.erreur||'Réponse invalide');
