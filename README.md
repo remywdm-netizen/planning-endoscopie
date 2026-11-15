@@ -31,6 +31,13 @@ Toute la saisie se fait sur le site. Un Google Sheet connecté conserve les rég
 2. **Déployer → Nouveau déploiement → Application Web** ; exécuter en tant que « Moi », accès « Tout le monde » ; autoriser.
 3. Sur le site, onglet MAR → coller l'URL `…/exec` et le code secret → **Connecter**. Pour les autres postes : **🔗 Copier le lien de connexion** et l'envoyer à l'équipe ; ouvrir ce lien connecte le poste automatiquement.
 
+Trois liens de connexion (onglet MAR, sur un poste administrateur) :
+- **🔗 Lien administrateur** : tout modifier (`CODE_SECRET`).
+- **🔗 Lien indisponibilités** : saisir uniquement les indisponibilités (`CODE_INDISPOS`, à définir dans le script).
+- **🔗 Lien consultation** : voir le planning sans rien modifier (`CODE_LECTURE`, à définir dans le script).
+
+Ces limites sont vérifiées par le script Google. Après avoir changé un code dans le script : Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer.
+
 Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouverture (la modification la plus récente l'emporte). Aucune identité patient n'est envoyée.
 
 Sans Google Sheet, les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).

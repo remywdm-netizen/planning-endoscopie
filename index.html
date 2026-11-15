@@ -78,6 +78,14 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .mar-btn{padding:5px 16px;border-radius:20px;border:2px solid var(--bd);background:var(--surf);cursor:pointer;font-size:13px;font-weight:700;font-family:var(--font)}
 .ind-layout{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
 @media(max-width:800px){.ind-layout{grid-template-columns:1fr}}
+/* Accès limités (lien consultation / indisponibilités) */
+body.role-lecture .admin-only,body.role-indispos .admin-only,body.role-lecture .edit-indispos{display:none!important}
+body.role-lecture .cellbtn,body.role-indispos .cellbtn{cursor:default}
+body.role-lecture .cellbtn:hover,body.role-indispos .cellbtn:hover{background:inherit}
+body.role-lecture .cal-day.click{cursor:default}
+body.role-lecture .cal-day.click:hover{border-color:transparent}
+.role-banner{display:none;padding:8px 12px;border-radius:var(--r);font-size:13px;margin-bottom:14px;border:1px solid #d4a72c;background:var(--yel-bg);color:var(--yel)}
+body.role-lecture .role-banner,body.role-indispos .role-banner{display:block}
 /* Libellés courts (téléphone) */
 .sh{display:none}
 @media(max-width:700px){
@@ -191,6 +199,7 @@ td.l{text-align:left}
     <button class="tab" id="tab-xls" onclick="showTab('xls')">📊 Planning Excel</button>
     <button class="tab" id="tab-mar" onclick="showTab('mar')">👨‍⚕️ MAR</button>
   </div>
+  <div class="role-banner" id="role-banner"></div>
 
   <!-- ── PLANNING ── -->
   <div class="view on" id="view-planning">
@@ -219,7 +228,7 @@ td.l{text-align:left}
   <div class="view" id="view-indispos">
     <p class="hint">Choisir un MAR puis cliquer sur les jours pour ajouter ou retirer une indisponibilité. Le planning est recalculé immédiatement. Les points sous chaque jour montrent les indisponibilités des autres MAR.</p>
     <div class="mar-pick" id="ind-pick"></div>
-    <div class="range">
+    <div class="range edit-indispos">
       <b>Période :</b> du <input type="date" id="rg-from" min="2026-09-28" max="2026-12-31"/>
       au <input type="date" id="rg-to" min="2026-09-28" max="2026-12-31"/>
       <button class="btn" onclick="applyRange(true)">+ Ajouter</button>
@@ -237,12 +246,12 @@ td.l{text-align:left}
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
     <p class="hint">Charger le fichier Excel des patients en consultation libérale : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>. Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère le patient : il doit être disponible à la date de bloc et n'a pas de consultation ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
-    <label class="drop" id="drop">
+    <label class="drop admin-only" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
       <div id="lib-src" style="margin-top:6px;font-size:12px"></div>
     </label>
-    <div class="card">
+    <div class="card admin-only">
       <b>Ajouter un patient manuellement</b>
       <div class="row">
         <label>Consultation <input type="date" id="lib-c" min="2026-09-28" max="2026-12-31"/></label>
@@ -278,8 +287,8 @@ td.l{text-align:left}
   <!-- ── MAR ── -->
   <div class="view" id="view-mar">
     <p class="hint">Les MAR titulaires (2 à 6) assurent obligatoirement le mardi et le jeudi-Consult. 1 et se partagent toutes les consultations. Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
-    <div class="mar-cards" id="mar-cards"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="mar-cards admin-only" id="mar-cards"></div>
+    <div class="admin-only" style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
       <button class="btn" onclick="exportConfig()">⬇ Exporter la configuration (JSON)</button>
       <label class="btn">⬆ Importer<input type="file" accept="application/json" style="display:none" onchange="importConfig(this)"/></label>
@@ -297,9 +306,11 @@ td.l{text-align:left}
         <button class="btn btn-g" onclick="gsConnecter()">Connecter</button>
       </div>
       <div class="row" style="margin-top:8px">
-        <button class="btn" onclick="gsEnvoyer(true)">⬆ Envoyer maintenant</button>
+        <button class="btn edit-indispos" onclick="gsEnvoyer(true)">⬆ Envoyer maintenant</button>
         <button class="btn" onclick="gsCharger(true)">⬇ Recharger depuis le Sheet</button>
-        <button class="btn" onclick="gsCopierLien()">🔗 Copier le lien de connexion</button>
+        <button class="btn admin-only" onclick="gsCopierLien('admin')">🔗 Lien administrateur</button>
+        <button class="btn admin-only" onclick="gsCopierLien('indispos')">🔗 Lien indisponibilités</button>
+        <button class="btn admin-only" onclick="gsCopierLien('lecture')">🔗 Lien consultation</button>
         <button class="btn btn-r" onclick="gsDeconnecter()">Déconnecter</button>
         <button class="btn" onclick="document.getElementById('gs-aide').hidden=!document.getElementById('gs-aide').hidden">❓ Mise en place</button>
       </div>
@@ -311,7 +322,11 @@ td.l{text-align:left}
           <li>En haut du script, remplacer <code>A-CHANGER</code> par un code secret de votre choix, puis enregistrer (💾).</li>
           <li><b>Déployer → Nouveau déploiement</b> → type <b>Application Web</b> ; « Exécuter en tant que » : <b>Moi</b> ; « Qui peut accéder » : <b>Tout le monde</b> → <b>Déployer</b>, puis autoriser l'accès à votre compte.</li>
           <li>Copier l'<b>URL de l'application Web</b> (se termine par <code>/exec</code>), la coller ci-dessus avec le code secret, puis <b>Connecter</b>.</li>
-          <li>Pour les autres postes et téléphones : cliquer <b>🔗 Copier le lien de connexion</b> et l'envoyer à l'équipe (SMS, e-mail). En ouvrant ce lien, le poste se connecte tout seul au Google Sheet.</li>
+          <li>Pour les autres postes et téléphones : copier un lien et l'envoyer (SMS, e-mail) ; en l'ouvrant, le poste se connecte tout seul au Google Sheet.
+            <ul style="margin-left:18px"><li><b>🔗 Lien administrateur</b> : tout modifier (code <code>CODE_SECRET</code>).</li>
+            <li><b>🔗 Lien indisponibilités</b> : saisir uniquement les indisponibilités (code <code>CODE_INDISPOS</code> à définir dans le script).</li>
+            <li><b>🔗 Lien consultation</b> : voir le planning sans rien modifier (code <code>CODE_LECTURE</code> à définir dans le script).</li></ul>
+            Ces limites sont vérifiées par le script Google lui-même. Après avoir défini ou changé un code dans le script : <b>Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer</b>.</li>
         </ol>
         <button class="btn" onclick="gsCopierScript()">📋 Copier le script</button>
         <span style="color:var(--t3);font-size:12px"> (aussi dans le dépôt : <code>google-sheet/Code.gs</code>)</span>
@@ -471,6 +486,7 @@ function renderForces(){
 // ── Forçage d'un praticien ──────────────────────────────────
 let forceCtx=null;
 function openForce(monday,slotId){
+  if(!peut('tout')) return refuse();
   const w=result.weeks.find(x=>x.monday===monday);
   const s=E.SLOTS.find(x=>x.id===slotId);
   const c=w.slots[slotId];
@@ -504,6 +520,7 @@ function openForce(monday,slotId){
 }
 function closeForce(){document.getElementById('modal').classList.remove('on');forceCtx=null;}
 function setForce(who){
+  if(!peut('tout')) return refuse();
   if(!forceCtx) return;
   const {monday,slotId}=forceCtx;
   const ov=Object.assign({},cfg.overrides[monday]||{});
@@ -519,6 +536,7 @@ function setForceExt(){
   setForce(v==='AUTRE MAR'||v==='AUTRE'?E.AUTRE:(v==='FERME'||v==='FERMÉ'?E.FERME:v));
 }
 function clearForces(){
+  if(!peut('tout')) return refuse();
   if(!confirm('Retirer tous les forçages et rouvrir les créneaux fermés (hors semaine de référence du 28/09) ?')) return;
   const ref=E.DEFAULT_CONFIG.start;
   cfg.overrides=cfg.overrides[ref]?{[ref]:cfg.overrides[ref]}:{};
@@ -626,21 +644,24 @@ function renderIndispos(){
 
   document.getElementById('ind-list').innerHTML=cfg.titulaires.map(t=>{
     const list=[...indSet(t.code)].sort();
-    const tags=list.length?list.map(d=>`<span class="tag">${E.labelFR(d)}<button title="Retirer" onclick="removeDay('${esc(t.code)}','${d}')">×</button></span>`).join(''):'<span style="color:var(--t3)">Aucune</span>';
+    const tags=list.length?list.map(d=>`<span class="tag">${E.labelFR(d)}<button class="edit-indispos" title="Retirer" onclick="removeDay('${esc(t.code)}','${d}')">×</button></span>`).join(''):'<span style="color:var(--t3)">Aucune</span>';
     return `<div class="grp"><b style="color:${t.couleur}">${esc(t.code)}</b> — ${list.length} jour(s)<br/>${tags}</div>`;
   }).join('')+`<div class="grp"><b>Jours fériés</b><br/>${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} — ${esc(n)}`).join('<br/>')}</div>`;
 }
 function pickMar(code){indMar=code;renderIndispos();}
 function toggleDay(k){
+  if(!peut('indispos')) return refuse();
   const s=indSet(indMar);
   if(s.has(k)){s.delete(k);toast(`${indMar} disponible le ${E.labelFR(k)}`);}
   else{s.add(k);toast(`${indMar} indisponible le ${E.labelFR(k)}`);}
   setIndispos(indMar,s);changed();
 }
 function removeDay(code,k){
+  if(!peut('indispos')) return refuse();
   const s=indSet(code);s.delete(k);setIndispos(code,s);changed();
 }
 function applyRange(add){
+  if(!peut('indispos')) return refuse();
   const from=document.getElementById('rg-from').value, to=document.getElementById('rg-to').value||from;
   if(!from){toast('Choisir une date de début');return;}
   if(to<from){toast('La date de fin est avant la date de début');return;}
@@ -691,6 +712,7 @@ function codeError(code){
   return null;
 }
 function addMar(){
+  if(!peut('tout')) return refuse();
   const code=document.getElementById('mc-new-code').value.trim().toUpperCase();
   const err=codeError(code);
   if(err){toast(err);return;}
@@ -702,6 +724,7 @@ function addMar(){
   toast(`✅ ${code} ajouté — saisir ses indisponibilités dans l'onglet 🚫`);
 }
 function delMar(i){
+  if(!peut('tout')) return refuse();
   const t=cfg.titulaires[i];
   if(!t||cfg.titulaires.length<=MIN_MAR) return;
   if(!confirm(`Retirer ${t.code} des MAR titulaires ?\nSes indisponibilités seront effacées. S'il est forcé sur des créneaux, il y reste comme praticien externe.`)) return;
@@ -711,6 +734,7 @@ function delMar(i){
   toast(`${t.code} retiré`);
 }
 function saveMars(){
+  if(!peut('tout')) return refuse();
   const vals=cfg.titulaires.map((t,i)=>({
     old:t.code,
     code:document.getElementById('mc-code-'+i).value.trim().toUpperCase(),
@@ -751,6 +775,7 @@ function exportConfig(){
   a.click();
 }
 function importConfig(input){
+  if(!peut('tout')) return refuse();
   const f=input.files[0]; if(!f) return;
   const rd=new FileReader();
   rd.onload=()=>{
@@ -765,6 +790,7 @@ function importConfig(input){
   rd.readAsText(f);
 }
 function resetConfig(){
+  if(!peut('tout')) return refuse();
   if(!confirm('Revenir aux MAR et indisponibilités d\'origine ? Les modifications seront perdues.')) return;
   const lib={liberales:cfg.liberales};
   cfg=Object.assign(clone(E.DEFAULT_CONFIG),lib); // consultations libérales conservées
@@ -871,7 +897,22 @@ async function xlsGenerer(){
   dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])xlsModele(e.dataTransfer.files[0]);});
 })();
 
+// Droits du poste : 'admin' (tout), 'indispos' (indisponibilités seulement), 'lecture' (rien).
+// Donnés par le script Google selon le code du lien ; sans Google Sheet : 'admin'.
+function droit(){return gsActif()?(gs.role||'admin'):'admin';}
+function peut(quoi){const d=droit();return d==='admin'||(quoi==='indispos'&&d==='indispos');}
+function refuse(){toast(droit()==='lecture'?'👁 Accès en consultation : modification impossible':'🚫 Accès limité à la saisie des indisponibilités');}
+function appliquerDroits(){
+  const d=droit();
+  document.body.classList.toggle('role-lecture',d==='lecture');
+  document.body.classList.toggle('role-indispos',d==='indispos');
+  document.getElementById('role-banner').textContent=d==='lecture'
+    ?'👁 Accès en consultation : le planning est affiché tel qu\'enregistré dans le Google Sheet, sans modification possible.'
+    :d==='indispos'?'🚫 Accès « indisponibilités » : vous pouvez uniquement ajouter ou retirer des indisponibilités (onglet 🚫).':'';
+}
+
 function changed(){
+  if(droit()==='lecture') return;
   cfg.majLe=Date.now();
   saveConfig();
   rafraichir();
@@ -944,11 +985,13 @@ function gsPlanifierEnvoi(){
 }
 async function gsEnvoyer(manuel){
   if(!gsActif()){toast('Connecter d\'abord le Google Sheet');return;}
+  if(droit()==='lecture'){if(manuel)refuse();return;}
   clearTimeout(gsTimer);
   try{
     gsEnCours=true;
     const t=gsTableaux();
-    await gsAppel({code:gs.code,reglages:persisted(),majLe:cfg.majLe||Date.now(),planning:t.planning,decompte:t.decompte});
+    const rep=await gsAppel({code:gs.code,reglages:persisted(),majLe:cfg.majLe||Date.now(),planning:t.planning,decompte:t.decompte});
+    gsRole(rep);
     gsStatut('Enregistré dans le Google Sheet',true);
     if(manuel) toast('✅ Envoyé au Google Sheet');
   }catch(e){gsStatut('Envoi impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
@@ -959,13 +1002,14 @@ async function gsCharger(manuel){
   try{
     gsStatut('Lecture du Google Sheet…',null);
     const j=await gsAppel(null);
-    if(j.reglages&&validConfig(j.reglages)&&(manuel||(j.majLe||0)>=(cfg.majLe||0))){
+    gsRole(j);
+    if(j.reglages&&validConfig(j.reglages)&&(manuel||droit()!=='admin'||(j.majLe||0)>=(cfg.majLe||0))){
       cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},j.reglages));
       cfg.majLe=j.majLe||cfg.majLe;
       saveConfig();rafraichir();
       gsStatut('Réglages chargés depuis le Google Sheet',true);
       if(manuel) toast('✅ Réglages rechargés depuis le Google Sheet');
-    }else if(!j.reglages||(j.majLe||0)<(cfg.majLe||0)){
+    }else if(droit()==='admin'&&(!j.reglages||(j.majLe||0)<(cfg.majLe||0))){
       await gsEnvoyer(false); // Sheet vide ou plus ancien que ce poste
     }else gsStatut('Connecté',true);
   }catch(e){gsStatut('Lecture impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
@@ -976,26 +1020,37 @@ async function gsConnecter(){
   if(!code){toast('Saisir le code secret choisi dans le script');return;}
   gs={url,code};gsSauver();
   await gsCharger(false);
+  appliquerDroits();
   if(gsEtat.ok) toast('✅ Google Sheet connecté');
 }
 function gsDeconnecter(){
   if(!confirm('Déconnecter le Google Sheet de ce poste ? Les réglages restent dans ce navigateur et dans le Sheet.')) return;
-  gs={url:'',code:''};gsSauver();clearTimeout(gsTimer);
+  gs={url:'',code:''};gsSauver();clearTimeout(gsTimer);appliquerDroits();
   document.getElementById('gs-url').value='';document.getElementById('gs-code').value='';
   document.getElementById('gs-local').textContent='Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).';
   gsEtat={msg:'',ok:null,quand:null};renderGs();
 }
 // Lien de connexion : adresse + code secret dans la partie « # » de l'adresse
 // (jamais envoyée au serveur ni publiée) ; ouvrir le lien connecte le poste.
-function gsLien(){
-  const jeton=btoa(unescape(encodeURIComponent(JSON.stringify({u:gs.url,c:gs.code})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+function gsRole(rep){
+  const r=rep&&['admin','indispos','lecture'].includes(rep.role)?rep.role:'admin'; // ancien script : administrateur
+  gs.role=r;
+  if(rep&&rep.codes) gs.codes=rep.codes; else if(r!=='admin') delete gs.codes;
+  gsSauver();appliquerDroits();
+}
+function gsLien(code){
+  const jeton=btoa(unescape(encodeURIComponent(JSON.stringify({u:gs.url,c:code})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   return location.href.split('#')[0]+'#gs='+jeton;
 }
-async function gsCopierLien(){
+async function gsCopierLien(type){
   if(!gsActif()){toast('Connecter d\'abord ce poste au Google Sheet');return;}
-  const lien=gsLien();
-  try{await navigator.clipboard.writeText(lien);toast('🔗 Lien copié : l\'envoyer à l\'équipe (il contient le code secret)');}
-  catch(e){prompt('Copier ce lien et l\'envoyer à l\'équipe :',lien);}
+  if(!peut('tout')) return refuse();
+  const NOMS={admin:'administrateur',indispos:'indisponibilités',lecture:'consultation'};
+  const code=type==='admin'?gs.code:((gs.codes||{})[type]||'');
+  if(!code){toast(`Définir ${type==='indispos'?'CODE_INDISPOS':'CODE_LECTURE'} dans le script Google, puis Gérer les déploiements → Nouvelle version, puis « Recharger depuis le Sheet »`);return;}
+  const lien=gsLien(code);
+  try{await navigator.clipboard.writeText(lien);toast(`🔗 Lien ${NOMS[type]} copié : l'envoyer aux personnes concernées`);}
+  catch(e){prompt(`Lien ${NOMS[type]} à copier :`,lien);}
 }
 function gsLireLien(){
   const m=location.hash.match(/^#gs=([A-Za-z0-9_-]+)$/);
@@ -1004,7 +1059,7 @@ function gsLireLien(){
     const b=m[1].replace(/-/g,'+').replace(/_/g,'/');
     const o=JSON.parse(decodeURIComponent(escape(atob(b+'==='.slice((b.length+3)%4)))));
     if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(o.u)||!o.c) throw new Error();
-    gs={url:o.u,code:o.c};gsSauver();
+    gs={url:o.u,code:o.c,role:gs.url===o.u&&gs.code===o.c?gs.role:'lecture'};gsSauver(); // prudence : lecture jusqu'à la réponse du script
   }catch(e){toast('⚠️ Lien de connexion invalide');}
   history.replaceState(null,'',location.href.split('#')[0]); // retire le code secret de la barre d'adresse
   return gsActif();
@@ -1063,6 +1118,7 @@ function parseRows(rows){
   return {rows:out,bad,consCol:headers[cc]||`colonne ${cc+1}`,blocCol:headers[bc]||`colonne ${bc+1}`};
 }
 function libFile(f){
+  if(!peut('tout')) return refuse();
   if(!f) return;
   if(typeof XLSX==='undefined'){toast('⚠️ Lecteur Excel non chargé');return;}
   const rd=new FileReader();
@@ -1086,14 +1142,16 @@ function libFile(f){
   rd.readAsArrayBuffer(f);
 }
 function libAddManual(){
+  if(!peut('tout')) return refuse();
   const c=document.getElementById('lib-c').value, b=document.getElementById('lib-b').value;
   if(!c||!b){toast('Saisir la date de consultation et la date de bloc');return;}
   cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
   document.getElementById('lib-i').value='';
   changed();toast(`Patient ajouté : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
 }
-function libDel(i){cfg.liberales.splice(i,1);changed();}
+function libDel(i){if(!peut('tout'))return refuse();cfg.liberales.splice(i,1);changed();}
 function libClear(){
+  if(!peut('tout')) return refuse();
   if(!confirm('Effacer tous les patients libéraux ?')) return;
   cfg.liberales=[];cfg.libSource='';
   try{localStorage.removeItem(STORE_KEY+'_libsrc');}catch(e){}
@@ -1118,7 +1176,7 @@ function renderLib(){
       <td class="l" style="white-space:nowrap"><b>${E.labelFR(r.bloc)}</b> <span style="color:var(--t3)">${esc(jourCourt(r.bloc))}</span></td>
       <td>${x.slot?esc(x.slot.label):'—'}</td><td>${x.med?chip(x.med):'—'}</td>
       <td class="l" style="font-size:11px;color:var(--t2)">${esc(r.info||'')}</td><td class="l">${stat}</td>
-      <td><button class="del" title="Supprimer" onclick="libDel(${i})">×</button></td></tr>`;
+      <td><button class="del admin-only" title="Supprimer" onclick="libDel(${i})">×</button></td></tr>`;
   });
   if(!rows.length) h+=`<tr><td colspan="7" style="color:var(--t3);padding:14px">Aucun patient libéral chargé.</td></tr>`;
   document.getElementById('lib-tbl').innerHTML=h+'</tbody>';
@@ -1127,7 +1185,7 @@ function renderLib(){
     <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">MAR disponible au bloc</div><div class="stat-v">${ok}</div></div>
     <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, MAR absent, date incohérente</div></div>
     <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
-  </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r" onclick="libClear()">Effacer tout</button></div>`:'';
+  </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r admin-only" onclick="libClear()">Effacer tout</button></div>`:'';
 }
 (function(){
   const dz=document.getElementById('drop');
@@ -1173,6 +1231,7 @@ renderMars();
 renderLib();
 renderXls();
 const viaLien=gsLireLien();
+appliquerDroits();
 renderGs();
 if(gsActif()) gsCharger(false).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); });
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
