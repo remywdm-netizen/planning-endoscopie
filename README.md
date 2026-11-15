@@ -33,8 +33,8 @@ Toute la saisie se fait sur le site. Un Google Sheet connecté conserve les rég
 
 Trois liens de connexion (onglet MAR, sur un poste administrateur) :
 - **🔗 Lien administrateur** : tout modifier (`CODE_SECRET`).
-- **🔗 Lien indisponibilités** : saisir uniquement les indisponibilités (`CODE_INDISPOS`, à définir dans le script).
-- **🔗 Lien consultation** : voir le planning sans rien modifier (`CODE_LECTURE`, à définir dans le script).
+- **🔗 Lien indisponibilités** : saisir uniquement les indisponibilités ; onglets Planning et Indisponibilités seulement (`CODE_INDISPOS`, à définir dans le script).
+- **🔗 Lien consultation** : voir le planning sans rien modifier ; onglet Planning seulement (`CODE_LECTURE`, à définir dans le script).
 
 Ces limites sont vérifiées par le script Google. Après avoir changé un code dans le script : Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer.
 

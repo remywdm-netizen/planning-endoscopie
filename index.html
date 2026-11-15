@@ -86,6 +86,9 @@ body.role-lecture .cal-day.click{cursor:default}
 body.role-lecture .cal-day.click:hover{border-color:transparent}
 .role-banner{display:none;padding:8px 12px;border-radius:var(--r);font-size:13px;margin-bottom:14px;border:1px solid #d4a72c;background:var(--yel-bg);color:var(--yel)}
 body.role-lecture .role-banner,body.role-indispos .role-banner{display:block}
+/* Onglets : consultation → Planning ; indisponibilités → Planning + Indisponibilités */
+body.role-lecture #tab-indispos,body.role-lecture #tab-lib,body.role-lecture #tab-xls,body.role-lecture #tab-mar,
+body.role-indispos #tab-lib,body.role-indispos #tab-xls,body.role-indispos #tab-mar{display:none}
 /* Libellés courts (téléphone) */
 .sh{display:none}
 @media(max-width:700px){
@@ -425,7 +428,10 @@ function toast(msg){
   const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');
   clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200);
 }
+const ONGLETS_PERMIS={admin:null,indispos:['planning','indispos'],lecture:['planning']};
 function showTab(id){
+  const permis=typeof droit==='function'?ONGLETS_PERMIS[droit()]:null;
+  if(permis&&!permis.includes(id)) id='planning';
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id==='tab-'+id));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='view-'+id));
   try{localStorage.setItem(STORE_KEY+'_tab',id);}catch(e){}
@@ -906,6 +912,9 @@ function appliquerDroits(){
   const d=droit();
   document.body.classList.toggle('role-lecture',d==='lecture');
   document.body.classList.toggle('role-indispos',d==='indispos');
+  const vue=document.querySelector('.view.on');
+  const permis=ONGLETS_PERMIS[d];
+  if(permis&&vue&&!permis.includes(vue.id.replace('view-',''))) showTab('planning');
   document.getElementById('role-banner').textContent=d==='lecture'
     ?'👁 Accès en consultation : le planning est affiché tel qu\'enregistré dans le Google Sheet, sans modification possible.'
     :d==='indispos'?'🚫 Accès « indisponibilités » : vous pouvez uniquement ajouter ou retirer des indisponibilités (onglet 🚫).':'';
