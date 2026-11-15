@@ -285,7 +285,38 @@ td.l{text-align:left}
       <label class="btn">⬆ Importer<input type="file" accept="application/json" style="display:none" onchange="importConfig(this)"/></label>
       <button class="btn btn-r" onclick="resetConfig()">↺ Revenir aux valeurs d'origine</button>
     </div>
-    <div class="ok info" style="margin-top:14px">Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager ou les conserver, utiliser « Exporter la configuration », puis « Importer » sur un autre poste.</div>
+    <div class="ok info" style="margin-top:14px" id="gs-local">Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).</div>
+
+    <h2>☁️ Google Sheet</h2>
+    <div class="card">
+      <p class="hint" style="margin-bottom:8px">Le Google Sheet conserve les réglages (MAR, indisponibilités, créneaux fermés ou forcés, patients libéraux) et affiche le planning et le décompte. Toute la saisie se fait sur le site : chaque modification est envoyée au Sheet, et chaque poste relit le Sheet à l'ouverture.</p>
+      <div id="gs-etat" style="margin-bottom:10px"></div>
+      <div class="row">
+        <input type="url" id="gs-url" placeholder="Adresse de l'application Web (https://script.google.com/macros/s/…/exec)" style="flex:1;min-width:220px"/>
+        <input type="password" id="gs-code" placeholder="Code secret" style="width:140px" autocomplete="off"/>
+        <button class="btn btn-g" onclick="gsConnecter()">Connecter</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" onclick="gsEnvoyer(true)">⬆ Envoyer maintenant</button>
+        <button class="btn" onclick="gsCharger(true)">⬇ Recharger depuis le Sheet</button>
+        <button class="btn btn-r" onclick="gsDeconnecter()">Déconnecter</button>
+        <button class="btn" onclick="document.getElementById('gs-aide').hidden=!document.getElementById('gs-aide').hidden">❓ Mise en place</button>
+      </div>
+      <div id="gs-aide" hidden style="margin-top:12px;font-size:13px;line-height:1.7">
+        <b>Mise en place (une seule fois, environ 10 minutes)</b>
+        <ol style="margin:6px 0 6px 20px">
+          <li>Créer un Google Sheet vide (ex. « Planning consultations anesthésie »).</li>
+          <li>Dans le Sheet : <b>Extensions → Apps Script</b>. Effacer le contenu et coller le script (bouton ci-dessous).</li>
+          <li>En haut du script, remplacer <code>A-CHANGER</code> par un code secret de votre choix, puis enregistrer (💾).</li>
+          <li><b>Déployer → Nouveau déploiement</b> → type <b>Application Web</b> ; « Exécuter en tant que » : <b>Moi</b> ; « Qui peut accéder » : <b>Tout le monde</b> → <b>Déployer</b>, puis autoriser l'accès à votre compte.</li>
+          <li>Copier l'<b>URL de l'application Web</b> (se termine par <code>/exec</code>), la coller ci-dessus avec le code secret, puis <b>Connecter</b>.</li>
+          <li>Sur chaque autre poste : onglet MAR → coller la même adresse et le même code → <b>Connecter</b>.</li>
+        </ol>
+        <button class="btn" onclick="gsCopierScript()">📋 Copier le script</button>
+        <span style="color:var(--t3);font-size:12px"> (aussi dans le dépôt : <code>google-sheet/Code.gs</code>)</span>
+        <p style="margin-top:8px;color:var(--t2);font-size:12px">L'adresse et le code secret donnent accès aux réglages : ne les partager qu'avec l'équipe. Aucune identité patient n'est envoyée (dates uniquement). Si deux postes modifient en même temps, la dernière modification enregistrée l'emporte.</p>
+      </div>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -353,7 +384,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, indisposV:cfg.indisposV||1};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, indisposV:cfg.indisposV||1, majLe:cfg.majLe||0};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -840,12 +871,119 @@ async function xlsGenerer(){
 })();
 
 function changed(){
+  cfg.majLe=Date.now();
   saveConfig();
+  rafraichir();
+  gsPlanifierEnvoi();
+}
+function rafraichir(){
   recompute();
   renderIndispos();
   renderMars();
   renderLib();
   renderXls();
+  renderGs();
+}
+
+// ── Synchronisation Google Sheet ─────────────────────────────
+// Le Sheet (script Apps Script, voir google-sheet/Code.gs) conserve les réglages
+// et affiche le planning ; la saisie se fait uniquement sur le site.
+const GS_KEY=STORE_KEY+'_gsheet';
+let gs={url:'',code:''}, gsEtat={msg:'',ok:null,quand:null}, gsTimer=null, gsEnCours=false;
+try{gs=Object.assign(gs,JSON.parse(localStorage.getItem(GS_KEY)||'{}'));}catch(e){}
+function gsSauver(){try{localStorage.setItem(GS_KEY,JSON.stringify(gs));}catch(e){}}
+function gsActif(){return !!(gs.url&&gs.code);}
+function gsStatut(msg,ok){gsEtat={msg,ok,quand:new Date()};renderGs();}
+function renderGs(){
+  const el=document.getElementById('gs-etat'); if(!el) return;
+  const u=document.getElementById('gs-url'), c=document.getElementById('gs-code');
+  if(u&&document.activeElement!==u&&!u.value) u.value=gs.url||'';
+  if(c&&document.activeElement!==c&&!c.value) c.value=gs.code||'';
+  if(!gsActif()){el.innerHTML='<span style="color:var(--t3)">Non connecté : les réglages restent dans ce navigateur.</span>';return;}
+  const h=gsEtat.quand?gsEtat.quand.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'';
+  const coul=gsEtat.ok===false?'var(--red)':gsEtat.ok?'#1a7f37':'var(--t2)';
+  el.innerHTML=`<span style="color:${coul};font-weight:600">${gsEtat.ok===false?'⚠️':'☁️'} ${esc(gsEtat.msg||'Connecté')}</span>${h?` <span style="color:var(--t3)">(${h})</span>`:''}`;
+  document.getElementById('gs-local').textContent='Les réglages sont synchronisés avec le Google Sheet : ils sont partagés par tous les postes connectés.';
+}
+function gsTableaux(){
+  const planning=[['Semaine','Lundi','Lun. C1','Lun. C2','Mardi','Mercredi','Jeu. C1','Jeu. C2']];
+  result.weeks.forEach(w=>{
+    planning.push([weekLabel(w.monday),w.monday.split('-').reverse().join('/')].concat(E.SLOTS.map(s=>{
+      const c=w.slots[s.id];
+      return c.ferme?'Fermé':c.ferie?'Férié':c.horsPeriode?'':(c.med||'')+(c.force?' (forcé)':'');
+    })));
+  });
+  const d=E.decompte(result.weeks,'2026-10-01','2026-12-31'), tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
+  const T=Object.values(d).reduce((a,b)=>a+b,0)||1;
+  const decompte=[['Praticien','Libérales (mardi + jeudi-C1)','Part des libérales','Total consultations (oct.–déc.)']];
+  [...codes(),E.AUTRE].forEach(k=>decompte.push([k,d[k]||0,Math.round(100*(d[k]||0)/T)+' %',(tot[k]&&tot[k].total)||0]));
+  decompte.push(['Mis à jour le',new Date().toLocaleString('fr-FR'),'','']);
+  return {planning,decompte};
+}
+async function gsAppel(corps){
+  const r=corps
+    ?await fetch(gs.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(corps)})
+    :await fetch(gs.url+(gs.url.includes('?')?'&':'?')+'code='+encodeURIComponent(gs.code)+'&_='+Date.now());
+  if(!r.ok) throw new Error('Google Sheet injoignable ('+r.status+')');
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.erreur||'Réponse invalide');
+  return j;
+}
+function gsPlanifierEnvoi(){
+  if(!gsActif()) return;
+  clearTimeout(gsTimer);
+  gsStatut('Modification en attente d\'envoi…',null);
+  gsTimer=setTimeout(()=>gsEnvoyer(false),1500);
+}
+async function gsEnvoyer(manuel){
+  if(!gsActif()){toast('Connecter d\'abord le Google Sheet');return;}
+  clearTimeout(gsTimer);
+  try{
+    gsEnCours=true;
+    const t=gsTableaux();
+    await gsAppel({code:gs.code,reglages:persisted(),majLe:cfg.majLe||Date.now(),planning:t.planning,decompte:t.decompte});
+    gsStatut('Enregistré dans le Google Sheet',true);
+    if(manuel) toast('✅ Envoyé au Google Sheet');
+  }catch(e){gsStatut('Envoi impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
+  finally{gsEnCours=false;}
+}
+async function gsCharger(manuel){
+  if(!gsActif()){if(manuel)toast('Connecter d\'abord le Google Sheet');return;}
+  try{
+    gsStatut('Lecture du Google Sheet…',null);
+    const j=await gsAppel(null);
+    if(j.reglages&&validConfig(j.reglages)&&(manuel||(j.majLe||0)>=(cfg.majLe||0))){
+      cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},j.reglages));
+      cfg.majLe=j.majLe||cfg.majLe;
+      saveConfig();rafraichir();
+      gsStatut('Réglages chargés depuis le Google Sheet',true);
+      if(manuel) toast('✅ Réglages rechargés depuis le Google Sheet');
+    }else if(!j.reglages||(j.majLe||0)<(cfg.majLe||0)){
+      await gsEnvoyer(false); // Sheet vide ou plus ancien que ce poste
+    }else gsStatut('Connecté',true);
+  }catch(e){gsStatut('Lecture impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
+}
+async function gsConnecter(){
+  const url=document.getElementById('gs-url').value.trim(), code=document.getElementById('gs-code').value.trim();
+  if(!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(url)){toast('Adresse attendue : https://script.google.com/macros/s/…/exec');return;}
+  if(!code){toast('Saisir le code secret choisi dans le script');return;}
+  gs={url,code};gsSauver();
+  await gsCharger(false);
+  if(gsEtat.ok) toast('✅ Google Sheet connecté');
+}
+function gsDeconnecter(){
+  if(!confirm('Déconnecter le Google Sheet de ce poste ? Les réglages restent dans ce navigateur et dans le Sheet.')) return;
+  gs={url:'',code:''};gsSauver();clearTimeout(gsTimer);
+  document.getElementById('gs-url').value='';document.getElementById('gs-code').value='';
+  document.getElementById('gs-local').textContent='Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).';
+  gsEtat={msg:'',ok:null,quand:null};renderGs();
+}
+async function gsCopierScript(){
+  try{
+    const r=await fetch('google-sheet/Code.gs');if(!r.ok)throw new Error();
+    await navigator.clipboard.writeText(await r.text());
+    toast('📋 Script copié : le coller dans Apps Script');
+  }catch(e){toast('Copie impossible : ouvrir google-sheet/Code.gs sur GitHub');}
 }
 
 // ── Consultations libérales (import Excel) ──────────────────
@@ -1003,6 +1141,8 @@ renderIndispos();
 renderMars();
 renderLib();
 renderXls();
+renderGs();
+if(gsActif()) gsCharger(false);
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
