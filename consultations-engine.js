@@ -590,6 +590,8 @@
     Object.entries(cfg.blocConfie).forEach(([b, meds]) => Object.keys(meds).forEach(m => {
       if (!isTit(m)) return;
       if (indispo[m].has(b)) add(`${labelFR(b)} : ${m} reçoit des patients libéraux mais est indisponible ce jour-là`, { force: true });
+      const consult = meds[m];
+      if (indispo[m].has(consult)) add(`${labelFR(consult)} : ${m} reçoit des patients libéraux vus ce jour-là mais est indisponible`, { force: true });
       (byDate[b] || []).filter(x => x.med === m).forEach(x =>
         add(`${labelFR(b)} : ${m} en consultation alors qu'il est au bloc (patients libéraux confiés)`, x, { force: !!x.force }));
     }));
@@ -675,6 +677,7 @@
         res.operateur = l.donneA;
         const conflitD = (cells[l.bloc] || []).find(x => x.med === l.donneA);
         if (isTit(l.donneA) && indispo[l.donneA].has(l.bloc)) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, indisponible le ${labelFR(l.bloc)}`; }
+        else if (isTit(l.donneA) && indispo[l.donneA].has(l.consult)) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, indisponible le jour de la consultation (${labelFR(l.consult)})`; }
         else if (conflitD) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, en consultation (${conflitD.slot.label}) le ${labelFR(l.bloc)}`; }
         else { res.statut = 'ok'; res.raison = `confiés à ${l.donneA}, au bloc le ${labelFR(l.bloc)}`; }
         return res;

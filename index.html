@@ -248,7 +248,7 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra alors être au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
     <label class="drop admin-only" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
@@ -257,9 +257,9 @@ td.l{text-align:left}
     <div class="card admin-only">
       <b>Ajouter des patients</b>
       <div class="row">
-        <label>Consultation <input type="date" id="lib-c" min="2026-09-28" max="2026-12-31"/></label>
-        <label>Bloc <input type="date" id="lib-b"/></label>
-        <label>Patients <input type="number" id="lib-n" min="1" max="50" value="1" style="width:64px"/></label>
+        <label>Consultation <select id="lib-c" onchange="libMajBloc()"></select></label>
+        <label>Jour de bloc <select id="lib-b"></select></label>
+        <label>Patients <select id="lib-n"></select></label>
         <input type="text" id="lib-i" placeholder="Examen / commentaire (facultatif)" style="flex:1;min-width:160px"/>
         <button class="btn btn-g" onclick="libAddManual()">+ Ajouter</button>
       </div>
@@ -1157,13 +1157,53 @@ function libAddManual(){
   if(!peut('tout')) return refuse();
   const c=document.getElementById('lib-c').value, b=document.getElementById('lib-b').value;
   const n=parseInt(document.getElementById('lib-n').value,10);
+  const garderC=c;
   if(!c||!b){toast('Saisir la date de consultation et la date de bloc');return;}
   if(!(n>=1&&n<=50)){toast('Nombre de patients : de 1 à 50');return;}
   if(b<=c){toast('Le jour de bloc doit être après la consultation');return;}
   cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,nb:n,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
-  document.getElementById('lib-i').value='';document.getElementById('lib-n').value='1';
-  changed();toast(`${n} patient(s) ajouté(s) : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
+  document.getElementById('lib-i').value='';
+  changed();
+  document.getElementById('lib-c').value=garderC;libMajBloc();
+  toast(`${n} patient(s) ajouté(s) : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
 }
+// Menus déroulants de saisie : consultations libérales du planning, jours de bloc qui suivent
+const JOURS_FR=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+function libelleJour(d){return JOURS_FR[new Date(d+'T00:00:00Z').getUTCDay()]+' '+E.labelFR(d);}
+function libMenus(){
+  const selC=document.getElementById('lib-c'); if(!selC) return;
+  const avant=selC.value;
+  const opts=[];
+  result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
+    const c=w.slots[s.id];
+    if(E.SLOT_LIBERALE[s.dow]!==s.id||c.ferie||c.ferme||c.horsPeriode) return;
+    opts.push(`<option value="${c.date}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
+  }));
+  selC.innerHTML=opts.join('');
+  const auj=new Date().toISOString().slice(0,10);
+  const premier=[...selC.options].find(o=>o.value>=auj);
+  selC.value=avant&&[...selC.options].some(o=>o.value===avant)?avant:(premier?premier.value:(selC.options[0]||{}).value||'');
+  const selN=document.getElementById('lib-n');
+  if(!selN.options.length) selN.innerHTML=Array.from({length:20},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+  libMajBloc();
+}
+function libMajBloc(){
+  const c=document.getElementById('lib-c').value, selB=document.getElementById('lib-b');
+  const avant=selB.value; selB.innerHTML='';
+  if(!c) return;
+  const dow=(new Date(c+'T00:00:00Z').getUTCDay()+6)%7;
+  const defaut=E.addDays(c,dow===1?6:dow===3?5:7); // report habituel : mardi → lundi suivant, jeudi → mardi suivant
+  const opts=[];
+  for(let i=1;i<=28;i++){
+    const d=E.addDays(c,i), j=new Date(d+'T00:00:00Z').getUTCDay();
+    if(j===0||j===6) continue;
+    const fer=cfg.feries[d];
+    opts.push(`<option value="${d}"${fer?' disabled':''}>${libelleJour(d)}${fer?' (férié)':''}</option>`);
+  }
+  selB.innerHTML=opts.join('');
+  selB.value=[...selB.options].some(o=>o.value===avant&&!o.disabled)?avant:([...selB.options].some(o=>o.value===defaut&&!o.disabled)?defaut:(selB.options[0]||{}).value);
+}
+
 // Lignes d'un même groupe (consultation, jour de bloc, MAR à qui ils sont confiés)
 const nbP=l=>l.nb||1;
 const memeGroupe=(l,c,b,d)=>l.consult===c&&l.bloc===b&&(l.donneA||'')===(d||'');
@@ -1209,6 +1249,7 @@ function libClear(){
 }
 function jourCourt(d){return new Date(d+'T00:00:00Z').toLocaleDateString('fr-FR',{weekday:'short',timeZone:'UTC'});}
 function renderLib(){
+  libMenus();
   try{if(!cfg.libSource)cfg.libSource=localStorage.getItem(STORE_KEY+'_libsrc')||'';}catch(e){}
   document.getElementById('lib-src').textContent=cfg.libSource||'';
   const rows=cfg.liberales||[];
@@ -1251,15 +1292,18 @@ function renderLib(){
         <td>${op?chip(op):'—'}</td><td class="l">${stat}</td>
         <td class="admin-only" style="white-space:nowrap">${actions}<button class="del" title="Supprimer" onclick="libDelGroupe('${g.consult}','${l.bloc}','${esc(l.donneA)}')">×</button></td></tr>`;
       if(!l.donneA&&y.statut!=='hors'){
+        // MAR présents le jour de la consultation ET le jour du bloc
         const opts=codes().map(t=>{
-          const ind=(cfg.indispos[t]||[]).includes(l.bloc);
-          return `<option value="${esc(t)}">${esc(t)}${ind?' (indisponible ce jour-là)':''}</option>`;
+          const ic=(cfg.indispos[t]||[]).includes(g.consult), ib=(cfg.indispos[t]||[]).includes(l.bloc);
+          const raison=ic&&ib?'absent le '+E.labelFR(g.consult)+' et le '+E.labelFR(l.bloc):ic?'absent le jour de la consultation':ib?'absent le jour du bloc':'';
+          return `<option value="${esc(t)}"${raison?' disabled':''}>${esc(t)}${raison?' ('+raison+')':''}</option>`;
         }).join('');
+        const premierDispo=codes().find(t=>!(cfg.indispos[t]||[]).includes(g.consult)&&!(cfg.indispos[t]||[]).includes(l.bloc));
         h+=`<tr id="don-${cle}" class="admin-only" hidden><td></td><td colspan="5" class="l"><div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
-          Donner <input type="number" id="don-n-${cle}" min="1" max="${l.nb}" value="${l.nb}" style="width:58px;padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)"/> patient(s) sur ${l.nb}
-          à <select id="don-m-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${opts}</select>
-          <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.consult}','${l.bloc}')">Confirmer</button>
-          <span style="color:var(--t3)">Le MAR choisi sera au bloc le ${E.labelFR(l.bloc)} (pas de consultation ce jour-là).</span></div></td></tr>`;
+          Donner <select id="don-n-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${Array.from({length:l.nb},(_,i)=>`<option${i+1===l.nb?' selected':''}>${i+1}</option>`).join('')}</select> patient(s) sur ${l.nb}
+          à <select id="don-m-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${premierDispo?'':'<option value="">— aucun MAR disponible —</option>'}${opts.replace(`value="${premierDispo}"`,`value="${premierDispo}" selected`)}</select>
+          <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.consult}','${l.bloc}')"${premierDispo?'':' disabled'}>Confirmer</button>
+          <span style="color:var(--t3)">Le MAR choisi doit être présent le ${E.labelFR(g.consult)} (consultation) et le ${E.labelFR(l.bloc)} (bloc, sans consultation ce jour-là).</span></div></td></tr>`;
       }
     });
   });

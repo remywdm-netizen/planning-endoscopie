@@ -407,3 +407,12 @@ test('patients confiés à un MAR indisponible ce jour-là : alerte', () => {
   assert.ok(E.alertes(r).some(a => /RW reçoit des patients libéraux mais est indisponible/.test(a)));
   assert.equal(E.liberaleStatus(r)[0].statut, 'alerte');
 });
+
+test('patients confiés : le MAR qui les reçoit doit être présent le jour de la consultation', () => {
+  // Consultation mardi 03/11 : RW et GR indisponibles ce jour-là ; patients confiés à RW → alerte
+  const r = withLib([{ consult: '2026-11-03', bloc: '2026-11-05', nb: 2, donneA: 'RW' }]);
+  assert.ok(E.alertes(r).some(a => /RW reçoit des patients libéraux vus ce jour-là mais est indisponible/.test(a)), JSON.stringify(E.alertes(r)));
+  const st = E.liberaleStatus(r)[0];
+  assert.equal(st.statut, 'alerte');
+  assert.match(st.raison, /jour de la consultation/);
+});
