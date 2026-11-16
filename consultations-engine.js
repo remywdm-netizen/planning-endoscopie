@@ -30,7 +30,12 @@
   };
 
   // Créneau de consultation libérale selon le jour (0 = lundi … 3 = jeudi).
-  const SLOT_LIBERALE = { 0: 'lun1', 1: 'mar', 2: 'mer', 3: 'jeu1' };
+  const SLOT_LIBERALE = { 0: 'lun1', 1: 'mar', 2: 'mer', 3: 'jeu1' };   // créneau libéral par défaut
+  const SLOTS_LIBERAUX = ['lun1', 'lun2', 'mar', 'mer', 'jeu1'];       // créneaux pouvant recevoir des libéraux
+  // Clé d'une consultation libérale : date + créneau (lundi : C1 ou C2)
+  const dowDe = iso => (new Date(iso + 'T00:00:00Z').getUTCDay() + 6) % 7;
+  const creneauLib = l => (l.slot && SLOTS_LIBERAUX.includes(l.slot) ? l.slot : SLOT_LIBERALE[dowDe(l.consult)]);
+  const cleLib = (date, slotId) => date + '|' + slotId;
 
   function days(month, list) {
     return list.map(d => `2026-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
@@ -122,21 +127,22 @@
     cfg.titulaires.forEach(t => { cfg.maxOf[t.code] = t.max || cfg.cap; });
     cfg.shareOf = partsLiberales(cfg.titulaires);
     // date de consultation → dates de bloc (postérieures) de ses patients
-    cfg.libMap = {};      // date de consultation → jours de bloc où son MAR doit être présent
+    cfg.libMap = {};      // consultation (date|créneau) → jours de bloc où son MAR doit être présent
     cfg.blocConfie = {};  // jour de bloc → { MAR : date de consultation } (patients confiés)
     cfg.autonomes = new Set(cfg.titulaires.filter(t => t.autonome).map(t => t.code));
     cfg.consultAvecDon = new Set(); // consultations dont des patients sont confiés à un autre MAR
-    cfg.libNb = {};       // date de consultation → { jour de bloc : nombre de patients non confiés }
+    cfg.libNb = {};       // consultation (date|créneau) → { jour de bloc : nombre de patients non confiés }
     (cfg.liberales || []).forEach(l => {
       if (!l || !l.consult || !l.bloc || l.bloc <= l.consult || (l.nb != null && Number(l.nb) <= 0)) return;
+      const cle = cleLib(l.consult, creneauLib(l));
       if (l.donneA) {
         (cfg.blocConfie[l.bloc] = cfg.blocConfie[l.bloc] || {})[l.donneA] = l.consult;
-        cfg.consultAvecDon.add(l.consult);
+        cfg.consultAvecDon.add(cle);
         return;
       }
-      const set = (cfg.libMap[l.consult] = cfg.libMap[l.consult] || []);
+      const set = (cfg.libMap[cle] = cfg.libMap[cle] || []);
       if (!set.includes(l.bloc)) set.push(l.bloc);
-      const nb = (cfg.libNb[l.consult] = cfg.libNb[l.consult] || {});
+      const nb = (cfg.libNb[cle] = cfg.libNb[cle] || {});
       nb[l.bloc] = (nb[l.bloc] || 0) + (Number(l.nb) || 1);
     });
     Object.values(cfg.libMap).forEach(a => a.sort());
@@ -212,8 +218,8 @@
   }
   // Patients libéraux d'une consultation que le MAR t devrait donner, car il est
   // absent un de leurs jours de bloc. « Autre MAR » : tous ses patients.
-  function patientsADonner(cfg, indispoT, date, t) {
-    const nb = cfg.libNb[date] || {};
+  function patientsADonner(cfg, indispoT, cle, t) {
+    const nb = cfg.libNb[cle] || {};
     if (t === AUTRE) return Object.values(nb).reduce((a, n) => a + n, 0);
     return Object.entries(nb).reduce((a, [b, n]) => a + (indispoT && indispoT.has(b) ? n : 0), 0);
   }
@@ -256,10 +262,11 @@
         // mais ces patients sont « à donner » (coût) — sauf MAR autonome (exclu).
         const rep = addDays(x.date, REPORT_BLOC[x.id].offset);
         const confie = cfg.blocConfie[x.date] || {};
+        const cle = cleLib(x.date, x.id);
         const ok = codes.filter(t => !indispo[t].has(x.date) && !confie[t] && (cfg.feries[rep] || !indispo[t].has(rep))
-          && !(cfg.autonomes.has(t) && (cfg.consultAvecDon.has(x.date) || patientsADonner(cfg, indispo[t], x.date, t) > 0)));
+          && !(cfg.autonomes.has(t) && (cfg.consultAvecDon.has(cle) || patientsADonner(cfg, indispo[t], cle, t) > 0)));
         const cout = {};
-        ok.concat([AUTRE]).forEach(t => { cout[t] = patientsADonner(cfg, indispo[t], x.date, t); });
+        ok.concat([AUTRE]).forEach(t => { cout[t] = patientsADonner(cfg, indispo[t], cle, t); });
         return Object.assign(x, { options: ok.concat([AUTRE]), cout });
       }));
     }
@@ -386,7 +393,8 @@
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
         info.ferme = !info.ferie && !info.horsPeriode && forces[s.id] === FERME;
         info.force = !info.ferie && !info.horsPeriode && !info.ferme && forces[s.id] ? forces[s.id] : null;
-        info.blocs = SLOT_LIBERALE[s.dow] === s.id ? (cfg.libMap[date] || []) : [];
+        const cle = cleLib(date, s.id);
+        info.blocs = SLOTS_LIBERAUX.includes(s.id) ? (cfg.libMap[cle] || []) : [];
         // Jour de bloc de report (mardi → lundi suivant, jeudi-C1 → mardi suivant), sauf férié
         const rep = REPORT_BLOC[s.id] ? addDays(date, REPORT_BLOC[s.id].offset) : null;
         info.reportBloc = rep && !cfg.feries[rep] ? rep : null;
@@ -397,13 +405,13 @@
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
           else if (info.reportBloc && indispo[t].has(info.reportBloc)) info.exclus[t] = `Indisponible le ${labelFR(info.reportBloc)} (jour de bloc de report)`;
           else if (absent && cfg.autonomes.has(t)) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc de ses patients libéraux ; autonome, ne peut pas les donner)`;
-          else if (cfg.autonomes.has(t) && SLOT_LIBERALE[s.dow] === s.id && cfg.consultAvecDon.has(date)) info.exclus[t] = 'Autonome : ne donne pas ses patients libéraux (des patients de cette consultation sont confiés)';
+          else if (cfg.autonomes.has(t) && cfg.consultAvecDon.has(cle)) info.exclus[t] = 'Autonome : ne donne pas ses patients libéraux (des patients de cette consultation sont confiés)';
         });
         // Patients libéraux à donner selon le MAR (absent un de leurs jours de bloc)
         info.aDonner = {};
         if (info.blocs.length) {
-          codes.forEach(t => { const n = patientsADonner(cfg, indispo[t], date, t); if (n) info.aDonner[t] = n; });
-          info.aDonner[AUTRE] = patientsADonner(cfg, null, date, AUTRE);
+          codes.forEach(t => { const n = patientsADonner(cfg, indispo[t], cle, t); if (n) info.aDonner[t] = n; });
+          info.aDonner[AUTRE] = patientsADonner(cfg, null, cle, AUTRE);
         }
         return info;
       });
@@ -631,7 +639,7 @@
     // MAR autonome en consultation : aucun de ses patients ne peut être confié
     weeks.forEach(w => SLOTS.forEach(s => {
       const c = w.slots[s.id];
-      if (cfg.autonomes.has(c.med) && SLOT_LIBERALE[s.dow] === s.id && cfg.consultAvecDon.has(c.date))
+      if (cfg.autonomes.has(c.med) && cfg.consultAvecDon.has(cleLib(c.date, s.id)))
         add(`${labelFR(c.date)} ${s.label} : ${c.med} est autonome, ses patients libéraux ne peuvent pas être confiés`, c);
     }));
     // Patients libéraux : le MAR de la consultation doit être libre le jour du bloc
@@ -639,7 +647,7 @@
       const c = w.slots[s.id];
       if (!isTit(c.med)) return;
       (c.blocs || []).forEach(b => {
-        if (indispo[c.med].has(b)) add(`${labelFR(c.date)} ${s.label} : ${(cfg.libNb[c.date] || {})[b] || ''} patient(s) du ${labelFR(b)} à donner (${c.med} absent ce jour-là)`, { force: true });
+        if (indispo[c.med].has(b)) add(`${labelFR(c.date)} ${s.label} : ${(cfg.libNb[cleLib(c.date, s.id)] || {})[b] || ''} patient(s) du ${labelFR(b)} à donner (${c.med} absent ce jour-là)`, { force: true });
         (byDate[b] || []).filter(x => x.med === c.med).forEach(x =>
           add(`${labelFR(b)} : ${c.med} en consultation alors qu'il est au bloc (patient libéral vu le ${labelFR(c.date)})`, c, x));
       });
@@ -707,7 +715,7 @@
       if (l.consult < cfg.start || l.consult > cfg.end) { res.raison = 'consultation hors période'; return res; }
       if (!day) { res.raison = 'pas de consultation d\'anesthésie ce jour-là'; return res; }
       if (day[0].ferie) { res.raison = `jour férié (${day[0].ferie})`; return res; }
-      const c = day.find(x => x.slot.id === SLOT_LIBERALE[x.slot.dow]);
+      const c = day.find(x => x.slot.id === creneauLib(l));
       res.slot = c.slot;
       res.med = c.med;
       if (c.ferme) { res.statut = 'alerte'; res.raison = 'créneau de consultation fermé ce jour-là'; return res; }
@@ -739,7 +747,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, FERME, SLOTS, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, FERME, SLOTS, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, SLOTS_LIBERAUX, creneauLib, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };

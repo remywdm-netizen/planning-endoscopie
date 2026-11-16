@@ -461,3 +461,21 @@ test('GR autonome : ne donne ni ne reçoit de patients libéraux', () => {
   assert.match(j2.exclus.GR, /Autonome/);
   assert.deepEqual(E.verify(r2), []);
 });
+
+test('patients libéraux sur la consultation 2 du lundi', () => {
+  // Lundi 23/11 : 2 patients sur Lun. C2, opérés le 25/11 (RW et SG absents ce jour-là)
+  const r = withLib([{ consult: '2026-11-23', slot: 'lun2', bloc: '2026-11-25', nb: 2 }]);
+  const w = r.weeks.find(x => x.monday === '2026-11-23');
+  assert.deepEqual(w.slots.lun2.blocs, ['2026-11-25']);
+  assert.deepEqual(w.slots.lun1.blocs, [], 'Lun. C1 non concerné');
+  const st = E.liberaleStatus(r)[0];
+  assert.equal(st.slot.id, 'lun2');
+  assert.equal(st.med, w.slots.lun2.med);
+  // Le MAR de Lun. C2 n'est pas en consultation le jour du bloc s'il opère
+  if (E.isTitulaire(w.slots.lun2.med) && !E.DEFAULT_CONFIG.indispos[w.slots.lun2.med].includes('2026-11-25'))
+    assert.notEqual(w.slots.mer.med, w.slots.lun2.med);
+  assert.deepEqual(E.verify(r), []);
+  // Sans créneau précisé, un lundi reste sur Lun. C1 (compatibilité)
+  const r1 = withLib([{ consult: '2026-11-23', bloc: '2026-11-25', nb: 1 }]);
+  assert.equal(E.liberaleStatus(r1)[0].slot.id, 'lun1');
+});
