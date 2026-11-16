@@ -49,6 +49,7 @@ td.wk small{display:block;font-weight:400;color:var(--t3);font-size:10px}
 .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-weight:700;font-size:12px;color:#fff}
 .chip.autre{background:#eaeef2;color:var(--t2);font-weight:600}
 .cell-d{display:block;font-size:10px;color:var(--t3);margin-top:2px}
+td.passe{background:#f6f8fa;opacity:.72}
 .ferie{background:#f0f0f0;color:var(--t3);font-size:11px;font-style:italic}
 .cellbtn{cursor:pointer;position:relative}
 .cellbtn:hover{background:var(--blue-bg)}
@@ -363,6 +364,7 @@ function cleanCfg(c){
   const ok=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d);
   c.liberales=(Array.isArray(c.liberales)?c.liberales:[]).filter(l=>l&&ok(l.consult)&&ok(l.bloc)&&(l.nb==null||(Number.isInteger(l.nb)&&l.nb>0)));
   delete c.libRows; delete c.aliases; // ancien format (colonne médecin)
+  c.figes=c.figes&&typeof c.figes==='object'?c.figes:{};
   // Configurations enregistrées avant la règle « GR 30 % des libérales »
   if(!c.partsV){
     const gr=c.titulaires.find(t=>t.code==='GR');
@@ -392,7 +394,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, autonomeV:1, indisposV:cfg.indisposV||1, majLe:cfg.majLe||0};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, autonomeV:1, indisposV:cfg.indisposV||1, majLe:cfg.majLe||0, figes:cfg.figes||{}};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -480,6 +482,7 @@ function openForce(monday,slotId){
   const s=E.SLOTS.find(x=>x.id===slotId);
   const c=w.slots[slotId];
   if(c.ferie||c.horsPeriode) return;
+  if(c.fige){toast('🔒 Journée passée : le planning de ce jour n\'est plus modifié');return;}
   forceCtx={monday,slotId};
   const forced=(cfg.overrides[monday]||{})[slotId]||null;
   document.getElementById('modal-title').innerHTML=`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.ferme?'fermé':(c.med?esc(c.med):'—')+(forced?' (forcé)':' (automatique)')}</small>`;
@@ -544,6 +547,7 @@ function renderPlan(){
     h+=`<tr${sep}><td class="wk"><span class="lg">${weekLabel(w.monday)}</span><span class="sh">${E.labelFR(w.monday)}</span><small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
     E.SLOTS.forEach(s=>{
       const c=w.slots[s.id];
+      if(c.fige){h+=`<td class="passe" title="Journée passée : planning figé, non recalculé">${c.ferme?'🚫':c.med?chip(c.med):'—'}<span class="cell-d">🔒 ${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫<span class="lg"> Fermé</span><span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
@@ -591,7 +595,8 @@ function renderRules(){
     <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
     <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.<br/>
-    <b>Créneau fermé</b> : pas de consultation, pas de report de bloc, non compté dans le décompte (cliquer sur la case → « Fermer ce créneau »).`;
+    <b>Créneau fermé</b> : pas de consultation, pas de report de bloc, non compté dans le décompte (cliquer sur la case → « Fermer ce créneau »).<br/>
+    <b>Journées passées</b> : figées automatiquement (🔒), telles qu'elles étaient ; les modifications ultérieures ne changent que les jours à venir.`;
 }
 
 // ── Indisponibilités ────────────────────────────────────────
@@ -775,7 +780,7 @@ function importConfig(input){
 }
 function resetConfig(){
   if(!confirm('Revenir aux MAR et indisponibilités d\'origine ? Les modifications seront perdues.')) return;
-  const lib={liberales:cfg.liberales};
+  const lib={liberales:cfg.liberales,figes:cfg.figes}; // journées passées : toujours conservées
   cfg=Object.assign(clone(E.DEFAULT_CONFIG),lib); // consultations libérales conservées
   changed();toast('Configuration d\'origine restaurée');
 }
@@ -920,7 +925,7 @@ function gsTableaux(){
   result.weeks.forEach(w=>{
     planning.push([weekLabel(w.monday),w.monday.split('-').reverse().join('/')].concat(E.SLOTS.map(s=>{
       const c=w.slots[s.id];
-      return c.ferme?'Fermé':c.ferie?'Férié':c.horsPeriode?'':(c.med||'')+(c.force?' (forcé)':'');
+      return c.ferme?'Fermé':c.ferie?'Férié':c.horsPeriode?'':(c.med||'')+(c.force&&!c.fige?' (forcé)':'');
     })));
   });
   const d=E.decompte(result.weeks,'2026-10-01','2026-12-31'), tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
@@ -1120,7 +1125,7 @@ function libMenus(){
   const opts=[];
   result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
     const c=w.slots[s.id];
-    if(!E.SLOTS_LIBERAUX.includes(s.id)||c.ferie||c.ferme||c.horsPeriode) return;
+    if(!E.SLOTS_LIBERAUX.includes(s.id)||c.ferie||c.ferme||c.horsPeriode||c.date<aujourdhui()) return; // jours passés retirés
     opts.push(`<option value="${c.date}|${s.id}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
   }));
   selC.innerHTML=opts.join('');
@@ -1317,9 +1322,26 @@ renderIndispos();
 renderMars();
 renderLib();
 renderXls();
+// Journées passées : figées telles qu'elles étaient, plus jamais recalculées.
+// (Avec le Google Sheet, on fige après avoir relu le Sheet, pour figer le planning commun.)
+function aujourdhui(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function figerPasse(){
+  const auj=aujourdhui(), f=Object.assign({},cfg.figes||{});
+  let n=0;
+  result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
+    const c=w.slots[s.id];
+    if(c.date>=auj||c.ferie||c.horsPeriode) return;
+    const k=c.date+'|'+s.id;
+    if(f[k]) return;
+    const v=c.ferme?E.FERME:c.med;
+    if(v){f[k]=v;n++;}
+  }));
+  if(n){cfg.figes=f;changed();}
+}
 const viaLien=gsLireLien();
 renderGs();
-if(gsActif()) gsCharger(false,viaLien).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); });
+if(gsActif()) gsCharger(false,viaLien).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); if(gsEtat.ok) figerPasse(); });
+else figerPasse();
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
