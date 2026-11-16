@@ -31,12 +31,7 @@ Toute la saisie se fait sur le site. Un Google Sheet connecté conserve les rég
 2. **Déployer → Nouveau déploiement → Application Web** ; exécuter en tant que « Moi », accès « Tout le monde » ; autoriser.
 3. Sur le site, onglet MAR → coller l'URL `…/exec` et le code secret → **Connecter**. Pour les autres postes : **🔗 Copier le lien de connexion** et l'envoyer à l'équipe ; ouvrir ce lien connecte le poste automatiquement.
 
-Trois liens de connexion (onglet MAR, sur un poste administrateur) :
-- **🔗 Lien administrateur** : tout modifier (`CODE_SECRET`).
-- **🔗 Lien indisponibilités** : saisir uniquement les indisponibilités ; onglets Planning et Indisponibilités seulement (`CODE_INDISPOS`, à définir dans le script).
-- **🔗 Lien consultation** : voir le planning sans rien modifier ; onglet Planning seulement (`CODE_LECTURE`, à définir dans le script).
-
-Ces limites sont vérifiées par le script Google. Après avoir changé un code dans le script : Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer.
+Pour les autres postes : **🔗 Copier le lien de connexion** et l'envoyer à l'équipe ; ouvrir ce lien connecte le poste automatiquement. Après avoir changé le code dans le script : Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer.
 
 Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouverture (la modification la plus récente l'emporte). Aucune identité patient n'est envoyée.
 
