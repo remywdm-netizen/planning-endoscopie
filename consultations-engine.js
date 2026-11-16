@@ -428,7 +428,9 @@
       });
 
       const actifs = ctx.filter(c => !c.ferie && !c.horsPeriode && !c.ferme);
-      week.override = actifs.length > 0 && actifs.every(c => c.force);
+      // Semaine entièrement forcée à la main (ex. semaine de référence) — pas une semaine simplement passée
+      const manuels = cfg.overrides[monday] || {};
+      week.override = actifs.length > 0 && actifs.every(c => manuels[c.slot.id] && manuels[c.slot.id] !== FERME);
       const choice = bestWeek(ctx, cum, cfg);
 
       ctx.forEach((c, i) => {

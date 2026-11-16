@@ -71,6 +71,12 @@ td.passe{background:#f6f8fa;opacity:.72}
 .opt-ext input{flex:1;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-family:var(--font);font-size:13px;text-transform:uppercase}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2);margin:10px 0}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:#fff3e0;border:1px solid #e65100;vertical-align:-1px}
+details.aide{margin-bottom:12px}
+details.aide>summary{cursor:pointer;font-size:12px;color:var(--blue);display:inline-block}
+details.aide[open]>summary{margin-bottom:6px}
+details.pli{margin-top:18px;background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 14px}
+details.pli>summary{cursor:pointer;font-size:14px;font-weight:600}
+details.pli[open]>summary{margin-bottom:10px}
 .rules{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 16px;font-size:12px;color:var(--t2);line-height:1.7}
 .rules b{color:var(--text)}
 
@@ -189,8 +195,7 @@ td.l{text-align:left}
     <button class="tab on" id="tab-planning" onclick="showTab('planning')">📅 Planning</button>
     <button class="tab" id="tab-indispos" onclick="showTab('indispos')">🚫 Indisponibilités</button>
     <button class="tab" id="tab-lib" onclick="showTab('lib')">📥 Consult. libérales</button>
-    <button class="tab" id="tab-xls" onclick="showTab('xls')">📊 Planning Excel</button>
-    <button class="tab" id="tab-mar" onclick="showTab('mar')">👨‍⚕️ MAR</button>
+    <button class="tab" id="tab-mar" onclick="showTab('mar')">⚙️ Réglages</button>
   </div>
 
   <!-- ── PLANNING ── -->
@@ -209,16 +214,17 @@ td.l{text-align:left}
     </div>
     <div class="tbl-wrap"><table id="plan"></table></div>
 
-    <h2>Total des consultations par praticien</h2>
-    <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
-
-    <h2>Règles appliquées</h2>
-    <div class="rules" id="rules"></div>
+    <details class="pli"><summary>Total des consultations par praticien</summary>
+      <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
+    </details>
+    <details class="pli"><summary>❓ Règles appliquées</summary>
+      <div class="rules" id="rules"></div>
+    </details>
   </div>
 
   <!-- ── INDISPONIBILITÉS ── -->
   <div class="view" id="view-indispos">
-    <p class="hint">Choisir un MAR puis cliquer sur les jours pour ajouter ou retirer une indisponibilité. Le planning est recalculé immédiatement. Les points sous chaque jour montrent les indisponibilités des autres MAR.</p>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Choisir un MAR puis cliquer sur les jours pour ajouter ou retirer une indisponibilité. Le planning est recalculé immédiatement. Les points sous chaque jour montrent les indisponibilités des autres MAR.</p></details>
     <div class="mar-pick" id="ind-pick"></div>
     <div class="range">
       <b>Période :</b> du <input type="date" id="rg-from" min="2026-09-28" max="2026-12-31"/>
@@ -237,7 +243,7 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale choisie (mardi, jeudi-Consult. 1, mercredi, lundi-Consult. 1 ou lundi-Consult. 2) opère ses patients : il doit être présent chaque jour de bloc (le bloc a lieu le matin : il peut consulter l'après-midi du même jour). Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là (le matin). Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale choisie (mardi, jeudi-Consult. 1, mercredi, lundi-Consult. 1 ou lundi-Consult. 2) opère ses patients : il doit être présent chaque jour de bloc (le bloc a lieu le matin : il peut consulter l'après-midi du même jour). Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là (le matin). Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p></details>
     <label class="drop" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
@@ -257,29 +263,10 @@ td.l{text-align:left}
     <div class="tbl-wrap"><table id="lib-tbl" style="min-width:680px"></table></div>
   </div>
 
-  <!-- ── PLANNING EXCEL ── -->
-  <div class="view" id="view-xls">
-    <p class="hint">Génère le planning hebdomadaire du service au format de votre modèle Excel, une feuille par semaine, avec la partie endoscopie remplie depuis ce site. Sont remplis : la ligne <b>Consultations d'anesthésie → ENDOSCOPIES</b> (l'après-midi), la ligne <b>ENDOSCOPIES</b> du bloc le matin (MAR au bloc par report : praticien du mardi le lundi suivant, du jeudi-C1 le mardi suivant, et patients libéraux), les <b>ABSENTS</b> (indisponibilités des MAR), les dates, le n° de semaine et les jours fériés. Les autres lignes (viscéral, ortho, gardes…) sont laissées vides ; la mise en forme, les formules et l'annuaire du modèle sont conservés.</p>
-    <label class="drop" id="xls-drop">
-      <input type="file" id="xls-file" accept=".xlsx,.xlsm" style="display:none" onchange="xlsModele(this.files[0]);this.value=''"/>
-      📄 <b>Choisir le modèle Excel</b> (ex. « Planning semaine 41.xlsx ») ou le glisser ici
-      <div id="xls-src" style="margin-top:6px;font-size:12px"></div>
-    </label>
-    <div class="card">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <b>Semaines à générer</b>
-        <button class="btn" onclick="xlsTout(true)">Tout cocher</button>
-        <button class="btn" onclick="xlsTout(false)">Tout décocher</button>
-        <span style="flex:1"></span>
-        <button class="btn btn-g" id="xls-go" onclick="xlsGenerer()">⬇ Générer le fichier Excel</button>
-      </div>
-    </div>
-    <div class="tbl-wrap"><table id="xls-tbl" style="min-width:760px"></table></div>
-  </div>
-
-  <!-- ── MAR ── -->
+  <!-- ── RÉGLAGES : MAR, Google Sheet, Planning Excel ── -->
   <div class="view" id="view-mar">
-    <p class="hint">Les MAR titulaires (2 à 6) assurent obligatoirement le mardi et le jeudi-Consult. 1 et se partagent toutes les consultations. Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p>
+    <h2>👨‍⚕️ MAR</h2>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Les MAR titulaires (2 à 6) assurent obligatoirement le mardi et le jeudi-Consult. 1 et se partagent toutes les consultations. Un MAR ajouté entre aussitôt dans la rotation et l'équilibrage. Modifier les initiales remplace le MAR partout (planning, indisponibilités, praticiens forcés). Le plafond « 3 / semaine » n'est utilisé que pour éviter un « Autre MAR ».</p></details>
     <div class="mar-cards" id="mar-cards"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
@@ -291,7 +278,7 @@ td.l{text-align:left}
 
     <h2>☁️ Google Sheet</h2>
     <div class="card">
-      <p class="hint" style="margin-bottom:8px">Le Google Sheet conserve les réglages (MAR, indisponibilités, créneaux fermés ou forcés, patients libéraux) et affiche le planning et le décompte. Toute la saisie se fait sur le site : chaque modification est envoyée au Sheet, et chaque poste relit le Sheet à l'ouverture.</p>
+      <details class="aide"><summary>❓ Aide</summary><p class="hint" style="margin-bottom:8px">Le Google Sheet conserve les réglages (MAR, indisponibilités, créneaux fermés ou forcés, patients libéraux) et affiche le planning et le décompte. Toute la saisie se fait sur le site : chaque modification est envoyée au Sheet, et chaque poste relit le Sheet à l'ouverture.</p></details>
       <div id="gs-etat" style="margin-bottom:10px"></div>
       <div class="row">
         <input type="url" id="gs-url" placeholder="Adresse de l'application Web (https://script.google.com/macros/s/…/exec)" style="flex:1;min-width:220px"/>
@@ -320,6 +307,24 @@ td.l{text-align:left}
         <p style="margin-top:8px;color:var(--t2);font-size:12px">L'adresse et le code secret donnent accès aux réglages : ne les partager qu'avec l'équipe. Aucune identité patient n'est envoyée (dates uniquement). Si deux postes modifient en même temps, la dernière modification enregistrée l'emporte.</p>
       </div>
     </div>
+
+    <h2>📊 Planning Excel</h2>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Génère le planning hebdomadaire du service au format de votre modèle Excel, une feuille par semaine, avec la partie endoscopie remplie depuis ce site. Sont remplis : la ligne <b>Consultations d'anesthésie → ENDOSCOPIES</b> (l'après-midi), la ligne <b>ENDOSCOPIES</b> du bloc le matin (MAR au bloc par report : praticien du mardi le lundi suivant, du jeudi-C1 le mardi suivant, et patients libéraux), les <b>ABSENTS</b> (indisponibilités des MAR), les dates, le n° de semaine et les jours fériés. Les autres lignes (viscéral, ortho, gardes…) sont laissées vides ; la mise en forme, les formules et l'annuaire du modèle sont conservés.</p></details>
+    <label class="drop" id="xls-drop">
+      <input type="file" id="xls-file" accept=".xlsx,.xlsm" style="display:none" onchange="xlsModele(this.files[0]);this.value=''"/>
+      📄 <b>Choisir le modèle Excel</b> (ex. « Planning semaine 41.xlsx ») ou le glisser ici
+      <div id="xls-src" style="margin-top:6px;font-size:12px"></div>
+    </label>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b>Semaines à générer</b>
+        <button class="btn" onclick="xlsTout(true)">Tout cocher</button>
+        <button class="btn" onclick="xlsTout(false)">Tout décocher</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-g" id="xls-go" onclick="xlsGenerer()">⬇ Générer le fichier Excel</button>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table id="xls-tbl" style="min-width:760px"></table></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -420,6 +425,7 @@ function toast(msg){
   clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2200);
 }
 function showTab(id){
+  if(id==='xls') id='mar'; // Planning Excel est dans l'onglet Réglages
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.id==='tab-'+id));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='view-'+id));
   try{localStorage.setItem(STORE_KEY+'_tab',id);}catch(e){}
