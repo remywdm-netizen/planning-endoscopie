@@ -202,7 +202,7 @@ td.l{text-align:left}
     <h2>Planning hebdomadaire</h2>
     <div class="legend">
       <span><span class="sw"></span> Colonnes orange : créneaux comptés au décompte</span>
-      <span>📌 Praticien forcé manuellement</span>
+      <span>📌 Praticien forcé manuellement <button class="btn btn-r" id="btn-clear-forces" style="display:none;padding:1px 8px;font-size:11px;margin-left:4px" onclick="clearForces()"></button></span>
       <span>🩺 Patients libéraux importés et leur date de bloc</span>
       <span><b>Cliquer sur une case</b> pour forcer un praticien (ou revenir au calcul automatique)</span>
     </div>
@@ -462,19 +462,15 @@ function renderForces(){
     E.SLOTS.forEach(s=>{ if(ov[s.id]) list.push({mon,s,who:ov[s.id]}); });
   });
   const toutes=E.alertes(result);
-  const aDonner=toutes.filter(m=>/ à donner \(/.test(m)), al=toutes.filter(m=>!/ à donner \(/.test(m));
+  const aDonner=toutes.filter(m=>/ à donner \(/.test(m)); // les écarts dus aux forçages ne sont plus affichés
   let h='';
   if(aDonner.length) h+=`<div class="ok info">🔁 Patients libéraux à donner (le MAR de la consultation est absent ce jour de bloc) — onglet 📥 Consult. libérales → « Donner… » :<br/>${aDonner.map(esc).join('<br/>')}</div>`;
-  if(al.length) h+=`<div class="ok info">📌 Forçage(s) en dehors des règles (choix manuel conservé) :<br/>${al.map(esc).join('<br/>')}</div>`;
   const fermes=list.filter(f=>f.who===E.FERME), forces=list.filter(f=>f.who!==E.FERME);
   if(fermes.length) h+=`<div class="ok info">🚫 ${fermes.length} créneau(x) fermé(s) : ${fermes.map(f=>`${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')} — cliquer sur la case puis « Automatique » pour rouvrir.</div>`;
-  if(forces.length){
-    h+=`<div class="ok info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">📌 ${forces.length} créneau(x) forcé(s) : ${forces.map(f=>`${esc(f.who)} ${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')}
-      <button class="btn btn-r" style="margin-left:auto" onclick="clearForces()">Retirer tous les forçages et fermetures</button></div>`;
-  }else if(fermes.length){
-    h+=`<div style="text-align:right;margin:-6px 0 12px"><button class="btn btn-r" onclick="clearForces()">Rouvrir tous les créneaux fermés</button></div>`;
-  }
   document.getElementById('forces').innerHTML=h;
+  // Bouton discret dans la légende du planning
+  const btn=document.getElementById('btn-clear-forces');
+  if(btn){btn.style.display=(forces.length||fermes.length)?'':'none';btn.textContent=forces.length?'Retirer tous les forçages et fermetures':'Rouvrir tous les créneaux fermés';}
 }
 
 // ── Forçage d'un praticien ──────────────────────────────────
