@@ -47,7 +47,8 @@
     titulaires: [
       { code: 'RW', couleur: '#0550ae', max: 3 },
       { code: 'SG', couleur: '#9333ea', max: 2 },
-      { code: 'GR', couleur: '#1b5e20', max: 2, part: 30 }, // 30 % des consultations libérales
+      // GR : 30 % des consultations libérales ; autonome = ne donne ni ne reçoit de patients libéraux
+      { code: 'GR', couleur: '#1b5e20', max: 2, part: 30, autonome: true },
     ],
     feries: {
       '2026-11-02': 'Toussaint (reportée au lundi)',
@@ -123,10 +124,13 @@
     // date de consultation → dates de bloc (postérieures) de ses patients
     cfg.libMap = {};      // date de consultation → jours de bloc où son MAR doit être présent
     cfg.blocConfie = {};  // jour de bloc → { MAR : date de consultation } (patients confiés)
+    cfg.autonomes = new Set(cfg.titulaires.filter(t => t.autonome).map(t => t.code));
+    cfg.consultAvecDon = new Set(); // consultations dont des patients sont confiés à un autre MAR
     (cfg.liberales || []).forEach(l => {
       if (!l || !l.consult || !l.bloc || l.bloc <= l.consult || (l.nb != null && Number(l.nb) <= 0)) return;
       if (l.donneA) {
         (cfg.blocConfie[l.bloc] = cfg.blocConfie[l.bloc] || {})[l.donneA] = l.consult;
+        cfg.consultAvecDon.add(l.consult);
         return;
       }
       const set = (cfg.libMap[l.consult] = cfg.libMap[l.consult] || []);
@@ -239,7 +243,8 @@
         const rep = addDays(x.date, REPORT_BLOC[x.id].offset);
         const blocs = (cfg.libMap[x.date] || []).concat(cfg.feries[rep] ? [] : [rep]);
         const confie = cfg.blocConfie[x.date] || {};
-        const ok = codes.filter(t => !indispo[t].has(x.date) && !confie[t] && !blocs.some(b => indispo[t].has(b)));
+        const ok = codes.filter(t => !indispo[t].has(x.date) && !confie[t] && !blocs.some(b => indispo[t].has(b))
+          && !(cfg.autonomes.has(t) && cfg.consultAvecDon.has(x.date)));
         return Object.assign(x, { options: ok.concat([AUTRE]) });
       }));
     }
@@ -375,6 +380,7 @@
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
           else if (info.reportBloc && indispo[t].has(info.reportBloc)) info.exclus[t] = `Indisponible le ${labelFR(info.reportBloc)} (jour de bloc de report)`;
           else if (absent) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc d'un patient libéral)`;
+          else if (cfg.autonomes.has(t) && SLOT_LIBERALE[s.dow] === s.id && cfg.consultAvecDon.has(date)) info.exclus[t] = 'Autonome : ne donne pas ses patients libéraux (des patients de cette consultation sont confiés)';
         });
         return info;
       });
@@ -588,12 +594,19 @@
     }));
     // Patients libéraux confiés : le MAR qui les reçoit doit être disponible et au bloc
     Object.entries(cfg.blocConfie).forEach(([b, meds]) => Object.keys(meds).forEach(m => {
+      if (cfg.autonomes.has(m)) add(`${labelFR(b)} : ${m} est autonome et ne reçoit pas de patients libéraux`, { force: true });
       if (!isTit(m)) return;
       if (indispo[m].has(b)) add(`${labelFR(b)} : ${m} reçoit des patients libéraux mais est indisponible ce jour-là`, { force: true });
       const consult = meds[m];
       if (indispo[m].has(consult)) add(`${labelFR(consult)} : ${m} reçoit des patients libéraux vus ce jour-là mais est indisponible`, { force: true });
       (byDate[b] || []).filter(x => x.med === m).forEach(x =>
         add(`${labelFR(b)} : ${m} en consultation alors qu'il est au bloc (patients libéraux confiés)`, x, { force: !!x.force }));
+    }));
+    // MAR autonome en consultation : aucun de ses patients ne peut être confié
+    weeks.forEach(w => SLOTS.forEach(s => {
+      const c = w.slots[s.id];
+      if (cfg.autonomes.has(c.med) && SLOT_LIBERALE[s.dow] === s.id && cfg.consultAvecDon.has(c.date))
+        add(`${labelFR(c.date)} ${s.label} : ${c.med} est autonome, ses patients libéraux ne peuvent pas être confiés`, c);
     }));
     // Patients libéraux : le MAR de la consultation doit être libre le jour du bloc
     weeks.forEach(w => SLOTS.forEach(s => {
@@ -676,7 +689,8 @@
       if (l.donneA) { // patients confiés à un autre MAR pour le bloc
         res.operateur = l.donneA;
         const conflitD = (cells[l.bloc] || []).find(x => x.med === l.donneA);
-        if (isTit(l.donneA) && indispo[l.donneA].has(l.bloc)) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, indisponible le ${labelFR(l.bloc)}`; }
+        if (cfg.autonomes.has(l.donneA)) { res.statut = 'alerte'; res.raison = `${l.donneA} est autonome : il ne reçoit pas de patients`; }
+        else if (isTit(l.donneA) && indispo[l.donneA].has(l.bloc)) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, indisponible le ${labelFR(l.bloc)}`; }
         else if (isTit(l.donneA) && indispo[l.donneA].has(l.consult)) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, indisponible le jour de la consultation (${labelFR(l.consult)})`; }
         else if (conflitD) { res.statut = 'alerte'; res.raison = `confiés à ${l.donneA}, en consultation (${conflitD.slot.label}) le ${labelFR(l.bloc)}`; }
         else { res.statut = 'ok'; res.raison = `confiés à ${l.donneA}, au bloc le ${labelFR(l.bloc)}`; }
