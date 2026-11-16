@@ -37,4 +37,4 @@ Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouv
 
 Sans Google Sheet, les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).
 
-**Journées passées** : figées automatiquement (🔒) dès qu'elles sont passées ; les modifications ultérieures ne changent que les jours à venir.
+**Journées passées** : figées automatiquement (🔒) dès qu'elles sont passées ; les modifications ultérieures ne changent que les jours à venir. Cliquer sur une case passée permet de la **corriger à la main** (MAR, Autre MAR, praticien externe ou pas de consultation).
