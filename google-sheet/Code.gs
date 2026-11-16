@@ -5,10 +5,9 @@
 // (partagés entre tous les postes) et affiche le planning.
 // ============================================================
 
-// Codes d'accès (le site les met dans les liens de connexion). Ne pas les partager hors de l'équipe.
-const CODE_SECRET = 'A-CHANGER';  // administrateur : tout modifier
-const CODE_INDISPOS = '';         // optionnel : saisie des indisponibilités seulement (ex. 'Indispo2026')
-const CODE_LECTURE = '';          // optionnel : consultation seulement (ex. 'Voir2026')
+// 1) Choisir un code secret (le même sera saisi sur le site, ou contenu dans le lien de connexion).
+//    Ne le partager qu'avec l'équipe.
+const CODE_SECRET = 'A-CHANGER';
 // Après une modification de ce script : Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer.
 
 const FEUILLE_REGLAGES = '_reglages';   // réglages du site (ne pas modifier à la main)
@@ -27,47 +26,29 @@ function doPost(e) {
   return repondre(traiter(corps, corps));
 }
 
-function roleDuCode(code) {
-  code = String(code || '');
-  if (code && code === CODE_SECRET) return 'admin';
-  if (CODE_INDISPOS && code === CODE_INDISPOS) return 'indispos';
-  if (CODE_LECTURE && code === CODE_LECTURE) return 'lecture';
-  return null;
-}
 
 function traiter(params, corps) {
   try {
     params = params || {};
     if (CODE_SECRET === 'A-CHANGER') return { ok: false, erreur: 'Code secret non défini dans le script (CODE_SECRET)' };
-    const role = roleDuCode(params.code);
-    if (!role) return { ok: false, erreur: 'Code secret incorrect' };
+    if (String(params.code || '') !== CODE_SECRET) return { ok: false, erreur: 'Code secret incorrect' };
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss) return { ok: false, erreur: 'Script à créer depuis le Google Sheet (Extensions → Apps Script)' };
     if (!corps) { // lecture
       const lu = lireReglages(ss);
-      const rep = { ok: true, role: role, reglages: lu.reglages, majLe: lu.majLe };
-      if (role === 'admin') rep.codes = { indispos: CODE_INDISPOS, lecture: CODE_LECTURE };
-      return rep;
+      return { ok: true, reglages: lu.reglages, majLe: lu.majLe };
     }
-    if (role === 'lecture') return { ok: false, role: role, erreur: 'Accès en consultation : modification refusée' };
     const verrou = LockService.getScriptLock();
     verrou.waitLock(20000);
     try {
-      let reglages = corps.reglages;
-      if (role === 'indispos') {
-        // Seules les indisponibilités peuvent changer ; le reste est repris du Sheet
-        const lu = lireReglages(ss);
-        if (!lu.reglages) return { ok: false, role: role, erreur: 'Réglages absents du Sheet : un administrateur doit d\'abord se connecter' };
-        reglages = Object.assign({}, lu.reglages, { indispos: (corps.reglages || {}).indispos || lu.reglages.indispos });
-      }
-      ecrireReglages(ss, reglages, corps.majLe);
+      ecrireReglages(ss, corps.reglages, corps.majLe);
       if (corps.planning) ecrireTableau(ss, FEUILLE_PLANNING, corps.planning);
       if (corps.decompte) ecrireTableau(ss, FEUILLE_DECOMPTE, corps.decompte);
       SpreadsheetApp.flush();
     } finally {
       verrou.releaseLock();
     }
-    return { ok: true, role: role, majLe: corps.majLe };
+    return { ok: true, majLe: corps.majLe };
   } catch (err) {
     return { ok: false, erreur: 'Erreur du script : ' + err.message };
   }
