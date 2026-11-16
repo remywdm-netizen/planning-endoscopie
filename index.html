@@ -1006,13 +1006,15 @@ async function gsEnvoyer(manuel){
   }catch(e){gsStatut('Envoi impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
   finally{gsEnCours=false;}
 }
-async function gsCharger(manuel){
+// premiere : première connexion de ce poste → le Sheet l'emporte toujours
+// (un téléphone avec d'anciens réglages ne doit pas écraser ceux de l'ordinateur)
+async function gsCharger(manuel,premiere){
   if(!gsActif()){if(manuel)toast('Connecter d\'abord le Google Sheet');return;}
   try{
     gsStatut('Lecture du Google Sheet…',null);
     const j=await gsAppel(null);
     gsRole(j);
-    if(j.reglages&&validConfig(j.reglages)&&(manuel||droit()!=='admin'||(j.majLe||0)>=(cfg.majLe||0))){
+    if(j.reglages&&validConfig(j.reglages)&&(manuel||premiere||droit()!=='admin'||(j.majLe||0)>=(cfg.majLe||0))){
       cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},j.reglages));
       cfg.majLe=j.majLe||cfg.majLe;
       saveConfig();rafraichir();
@@ -1028,7 +1030,7 @@ async function gsConnecter(){
   if(!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(url)){toast('Adresse attendue : https://script.google.com/macros/s/…/exec');return;}
   if(!code){toast('Saisir le code secret choisi dans le script');return;}
   gs={url,code};gsSauver();
-  await gsCharger(false);
+  await gsCharger(false,true);
   appliquerDroits();
   if(gsEtat.ok) toast('✅ Google Sheet connecté');
 }
@@ -1242,7 +1244,7 @@ renderXls();
 const viaLien=gsLireLien();
 appliquerDroits();
 renderGs();
-if(gsActif()) gsCharger(false).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); });
+if(gsActif()) gsCharger(false,viaLien).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); });
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
