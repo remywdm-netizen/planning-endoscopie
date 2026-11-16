@@ -482,10 +482,12 @@ function openForce(monday,slotId){
   const s=E.SLOTS.find(x=>x.id===slotId);
   const c=w.slots[slotId];
   if(c.ferie||c.horsPeriode) return;
-  if(c.fige){toast('🔒 Journée passée : le planning de ce jour n\'est plus modifié');return;}
-  forceCtx={monday,slotId};
-  const forced=(cfg.overrides[monday]||{})[slotId]||null;
-  document.getElementById('modal-title').innerHTML=`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.ferme?'fermé':(c.med?esc(c.med):'—')+(forced?' (forcé)':' (automatique)')}</small>`;
+  const passe=!!c.fige; // journée passée : correction manuelle de ce qui a été fait
+  forceCtx={monday,slotId,passe,date:c.date};
+  const forced=passe?(cfg.figes[c.date+'|'+slotId]||null):((cfg.overrides[monday]||{})[slotId]||null);
+  document.getElementById('modal-title').innerHTML=passe
+    ?`🔒 ${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Journée passée : corriger ce qui a été fait (actuellement : ${c.ferme?'fermé':c.med?esc(c.med):'—'})</small>`
+    :`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.ferme?'fermé':(c.med?esc(c.med):'—')+(forced?' (forcé)':' (automatique)')}</small>`;
   const notes=code=>{
     const n=[];
     if(c.exclus[code]) n.push(c.exclus[code]);
@@ -499,14 +501,15 @@ function openForce(monday,slotId){
     return n;
   };
   const extCur=forced&&!codes().includes(forced)&&forced!==E.AUTRE&&forced!==E.FERME?forced:'';
-  let h=`<button class="opt${!forced?' cur':''}" onclick="setForce(null)">🔄 <b>Automatique</b><span class="opt-note">calcul selon les règles</span></button>`;
+  let h=passe?'':`<button class="opt${!forced?' cur':''}" onclick="setForce(null)">🔄 <b>Automatique</b><span class="opt-note">calcul selon les règles</span></button>`;
   cfg.titulaires.forEach(t=>{
     const n=notes(t.code);
-    h+=`<button class="opt${forced===t.code?' cur':''}" onclick="setForce('${esc(t.code)}')">${chip(t.code)}<span class="opt-note${n.length?' warn':''}">${n.length?'⚠️ '+esc(n.join(' · ')):'disponible'}</span></button>`;
+    h+=`<button class="opt${forced===t.code?' cur':''}" onclick="setForce('${esc(t.code)}')">${chip(t.code)}<span class="opt-note${n.length&&!passe?' warn':''}">${passe?'':n.length?'⚠️ '+esc(n.join(' · ')):'disponible'}</span></button>`;
   });
   h+=`<button class="opt${forced===E.AUTRE?' cur':''}" onclick="setForce('${E.AUTRE}')">${chip(E.AUTRE)}<span class="opt-note">remplaçant non nommé</span></button>`;
-  h+=`<button class="opt${forced===E.FERME?' cur':''}" onclick="setForce('${E.FERME}')">🚫 <b>Fermer ce créneau</b><span class="opt-note">pas de consultation ce jour-là</span></button>`;
-  h+=`<div class="opt-ext"><input id="opt-ext" maxlength="12" placeholder="Autre praticien (ex. AFR)" value="${esc(extCur)}" onkeydown="if(event.key==='Enter')setForceExt()"/><button class="btn btn-g" onclick="setForceExt()">Forcer</button></div>`;
+  h+=`<button class="opt${forced===E.FERME?' cur':''}" onclick="setForce('${E.FERME}')">🚫 <b>${passe?'Pas de consultation':'Fermer ce créneau'}</b><span class="opt-note">pas de consultation ce jour-là</span></button>`;
+  h+=`<div class="opt-ext"><input id="opt-ext" maxlength="12" placeholder="Autre praticien (ex. AFR)" value="${esc(extCur)}" onkeydown="if(event.key==='Enter')setForceExt()"/><button class="btn btn-g" onclick="setForceExt()">${passe?'Corriger':'Forcer'}</button></div>`;
+  if(passe) h+=`<p style="font-size:12px;color:var(--t2);margin-top:10px">La correction est enregistrée pour ce jour passé ; le calcul des jours à venir en tient compte (décompte, report de bloc).</p>`;
   document.getElementById('modal-body').innerHTML=h;
   document.getElementById('modal').classList.add('on');
 }
@@ -514,6 +517,14 @@ function closeForce(){document.getElementById('modal').classList.remove('on');fo
 function setForce(who){
   if(!forceCtx) return;
   const {monday,slotId}=forceCtx;
+  if(forceCtx.passe){ // correction d'une journée passée
+    if(!who) return;
+    cfg.figes=Object.assign({},cfg.figes,{[forceCtx.date+'|'+slotId]:who});
+    const d=forceCtx.date;
+    closeForce();changed();
+    toast(`🔒 ${E.labelFR(d)} corrigé : ${who===E.FERME?'pas de consultation':who}`);
+    return;
+  }
   const ov=Object.assign({},cfg.overrides[monday]||{});
   if(who) ov[slotId]=who; else delete ov[slotId];
   if(Object.keys(ov).length) cfg.overrides[monday]=ov; else delete cfg.overrides[monday];
@@ -547,7 +558,7 @@ function renderPlan(){
     h+=`<tr${sep}><td class="wk"><span class="lg">${weekLabel(w.monday)}</span><span class="sh">${E.labelFR(w.monday)}</span><small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
     E.SLOTS.forEach(s=>{
       const c=w.slots[s.id];
-      if(c.fige){h+=`<td class="passe" title="Journée passée : planning figé, non recalculé">${c.ferme?'🚫':c.med?chip(c.med):'—'}<span class="cell-d">🔒 ${E.labelFR(c.date)}</span></td>`;return;}
+      if(c.fige){h+=`<td class="passe cellbtn" title="Journée passée : planning figé, non recalculé — cliquer pour corriger" onclick="openForce('${w.monday}','${s.id}')">${c.ferme?'🚫':c.med?chip(c.med):'—'}<span class="cell-d">🔒 ${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫<span class="lg"> Fermé</span><span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.horsPeriode){h+=`<td class="ferie">—</td>`;return;}
@@ -596,7 +607,7 @@ function renderRules(){
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
     <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.<br/>
     <b>Créneau fermé</b> : pas de consultation, pas de report de bloc, non compté dans le décompte (cliquer sur la case → « Fermer ce créneau »).<br/>
-    <b>Journées passées</b> : figées automatiquement (🔒), telles qu'elles étaient ; les modifications ultérieures ne changent que les jours à venir.`;
+    <b>Journées passées</b> : figées automatiquement (🔒), telles qu'elles étaient ; les modifications ultérieures ne changent que les jours à venir. Cliquer sur une case passée permet de la corriger à la main.`;
 }
 
 // ── Indisponibilités ────────────────────────────────────────
