@@ -248,17 +248,18 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Charger le fichier Excel des patients en consultation libérale : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>. Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère le patient : il doit être disponible à la date de bloc et n'a pas de consultation ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
     <label class="drop admin-only" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
       <div id="lib-src" style="margin-top:6px;font-size:12px"></div>
     </label>
     <div class="card admin-only">
-      <b>Ajouter un patient manuellement</b>
+      <b>Ajouter des patients</b>
       <div class="row">
-        <label>Consultation <input type="date" id="lib-c" min="2026-09-28" max="2026-12-31"/></label>
-        <label>Bloc <input type="date" id="lib-b"/></label>
+        <label>Consultation <select id="lib-c" onchange="libMajBloc()"></select></label>
+        <label>Jour de bloc <select id="lib-b"></select></label>
+        <label>Patients <select id="lib-n"></select></label>
         <input type="text" id="lib-i" placeholder="Examen / commentaire (facultatif)" style="flex:1;min-width:160px"/>
         <button class="btn btn-g" onclick="libAddManual()">+ Ajouter</button>
       </div>
@@ -378,13 +379,19 @@ function loadConfig(){
 }
 function cleanCfg(c){
   const ok=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d);
-  c.liberales=(Array.isArray(c.liberales)?c.liberales:[]).filter(l=>l&&ok(l.consult)&&ok(l.bloc));
+  c.liberales=(Array.isArray(c.liberales)?c.liberales:[]).filter(l=>l&&ok(l.consult)&&ok(l.bloc)&&(l.nb==null||(Number.isInteger(l.nb)&&l.nb>0)));
   delete c.libRows; delete c.aliases; // ancien format (colonne médecin)
   // Configurations enregistrées avant la règle « GR 30 % des libérales »
   if(!c.partsV){
     const gr=c.titulaires.find(t=>t.code==='GR');
     if(gr&&gr.part==null) gr.part=30;
     c.partsV=1;
+  }
+  // GR autonome (ne donne ni ne reçoit de patients libéraux)
+  if(!c.autonomeV){
+    const gr=c.titulaires.find(t=>t.code==='GR');
+    if(gr&&gr.autonome==null) gr.autonome=true;
+    c.autonomeV=1;
   }
   // Indisponibilités ajoutées depuis (ex. AFR en novembre, dont repos le 27/11)
   const ajouts=E.DEFAULT_CONFIG.ajoutsIndispos||{};
@@ -403,7 +410,7 @@ function validConfig(c){
 }
 // Ce qui est enregistré / exporté
 function persisted(){
-  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, indisposV:cfg.indisposV||1, majLe:cfg.majLe||0};
+  return {titulaires:cfg.titulaires, indispos:cfg.indispos, overrides:cfg.overrides, liberales:cfg.liberales||[], partsV:1, autonomeV:1, indisposV:cfg.indisposV||1, majLe:cfg.majLe||0};
 }
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
@@ -475,8 +482,10 @@ function renderForces(){
     if(mon===E.DEFAULT_CONFIG.start) return; // semaine de référence
     E.SLOTS.forEach(s=>{ if(ov[s.id]) list.push({mon,s,who:ov[s.id]}); });
   });
-  const al=E.alertes(result);
+  const toutes=E.alertes(result);
+  const aDonner=toutes.filter(m=>/ à donner \(/.test(m)), al=toutes.filter(m=>!/ à donner \(/.test(m));
   let h='';
+  if(aDonner.length) h+=`<div class="ok info">🔁 Patients libéraux à donner (le MAR de la consultation est absent ce jour de bloc) — onglet 📥 Consult. libérales → « Donner… » :<br/>${aDonner.map(esc).join('<br/>')}</div>`;
   if(al.length) h+=`<div class="ok info">📌 Forçage(s) en dehors des règles (choix manuel conservé) :<br/>${al.map(esc).join('<br/>')}</div>`;
   const fermes=list.filter(f=>f.who===E.FERME), forces=list.filter(f=>f.who!==E.FERME);
   if(fermes.length) h+=`<div class="ok info">🚫 ${fermes.length} créneau(x) fermé(s) : ${fermes.map(f=>`${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')} — cliquer sur la case puis « Automatique » pour rouvrir.</div>`;
@@ -605,6 +614,7 @@ function renderRules(){
     <b>Exclusivité</b> : mardi et jeudi-C1 toujours ${cs.map(esc).join(' / ')} (« Autre MAR » seulement si aucun n'est éligible) ; jamais le même titulaire sur les deux la même semaine.<br/>
     <b>Plafond / semaine</b> : ${plaf} — au-delà de ${cfg.cap}, uniquement si cela évite un « Autre MAR ».<br/>
     <b>Consultations libérales (mardi + jeudi-C1)</b> : ${cfg.titulaires.filter(t=>t.part!=null).map(t=>`${esc(t.code)} au moins ${t.part} %`).join(', ')||'aucune part minimale'}${cfg.titulaires.some(t=>t.part!=null)?' (arrondi au créneau supérieur : 30 % de 25 → 8), le reste réparti à égalité':''}.<br/>
+    <b>Échange de patients libéraux</b> : possible entre tous les MAR${cfg.titulaires.some(t=>t.autonome)?', sauf '+cfg.titulaires.filter(t=>t.autonome).map(t=>esc(t.code)).join(', ')+' (autonome : assure seul ses patients, ne donne ni ne reçoit)':''} ; le MAR qui reçoit doit être présent le jour de la consultation et au bloc.<br/>
     <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
     <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
@@ -700,6 +710,7 @@ function renderMars(){
       </select>
       <label for="mc-part-${i}">Part minimale des consultations libérales (mardi + jeu. C1)</label>
       <div style="display:flex;align-items:center;gap:6px"><input type="number" id="mc-part-${i}" min="0" max="100" step="1" placeholder="équitable" value="${t.part!=null?t.part:''}" style="width:110px;padding:6px 9px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px;font-family:var(--font)"/> %</div>
+      <label style="display:flex;gap:6px;align-items:center;font-weight:400;font-size:12px;color:var(--text);margin-top:10px"><input type="checkbox" id="mc-auto-${i}"${t.autonome?' checked':''}/> Autonome : ne donne ni ne reçoit de patients libéraux</label>
       <div class="meta">${nInd} jour(s) d'indisponibilité · décompte T4 : ${d}</div>
     </div>`;
   }).join('')+(cfg.titulaires.length<MAX_MAR?`<div class="mar-card mar-add">
@@ -747,6 +758,7 @@ function saveMars(){
     couleur:document.getElementById('mc-col-'+i).value,
     max:Number(document.getElementById('mc-max-'+i).value),
     part:document.getElementById('mc-part-'+i).value.trim(),
+    autonome:document.getElementById('mc-auto-'+i).checked,
   }));
   for(const v of vals){
     if(v.part==='') {v.part=null;continue;}
@@ -768,6 +780,7 @@ function saveMars(){
   next.titulaires.forEach((t,i)=>{
     t.couleur=vals[i].couleur;t.max=vals[i].max;
     if(vals[i].part==null) delete t.part; else t.part=vals[i].part;
+    if(vals[i].autonome) t.autonome=true; else delete t.autonome;
   });
   cfg=next;
   changed();
@@ -1155,12 +1168,92 @@ function libFile(f){
 function libAddManual(){
   if(!peut('tout')) return refuse();
   const c=document.getElementById('lib-c').value, b=document.getElementById('lib-b').value;
+  const n=parseInt(document.getElementById('lib-n').value,10);
+  const garderC=c;
   if(!c||!b){toast('Saisir la date de consultation et la date de bloc');return;}
-  cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
+  if(!(n>=1&&n<=50)){toast('Nombre de patients : de 1 à 50');return;}
+  if(b<=c){toast('Le jour de bloc doit être après la consultation');return;}
+  cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,nb:n,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
   document.getElementById('lib-i').value='';
-  changed();toast(`Patient ajouté : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
+  changed();
+  document.getElementById('lib-c').value=garderC;libMajBloc();
+  toast(`${n} patient(s) ajouté(s) : consultation ${E.labelFR(c)} → bloc ${E.labelFR(b)}`);
 }
-function libDel(i){if(!peut('tout'))return refuse();cfg.liberales.splice(i,1);changed();}
+// Menus déroulants de saisie : consultations libérales du planning, jours de bloc qui suivent
+const JOURS_FR=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+function libelleJour(d){return JOURS_FR[new Date(d+'T00:00:00Z').getUTCDay()]+' '+E.labelFR(d);}
+function libMenus(){
+  const selC=document.getElementById('lib-c'); if(!selC) return;
+  const avant=selC.value;
+  const opts=[];
+  result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
+    const c=w.slots[s.id];
+    if(E.SLOT_LIBERALE[s.dow]!==s.id||c.ferie||c.ferme||c.horsPeriode) return;
+    opts.push(`<option value="${c.date}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
+  }));
+  selC.innerHTML=opts.join('');
+  const auj=new Date().toISOString().slice(0,10);
+  const premier=[...selC.options].find(o=>o.value>=auj);
+  selC.value=avant&&[...selC.options].some(o=>o.value===avant)?avant:(premier?premier.value:(selC.options[0]||{}).value||'');
+  const selN=document.getElementById('lib-n');
+  if(!selN.options.length) selN.innerHTML=Array.from({length:20},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+  libMajBloc();
+}
+function libMajBloc(){
+  const c=document.getElementById('lib-c').value, selB=document.getElementById('lib-b');
+  const avant=selB.value; selB.innerHTML='';
+  if(!c) return;
+  const dow=(new Date(c+'T00:00:00Z').getUTCDay()+6)%7;
+  const defaut=E.addDays(c,dow===1?6:dow===3?5:7); // report habituel : mardi → lundi suivant, jeudi → mardi suivant
+  const opts=[];
+  for(let i=1;i<=28;i++){
+    const d=E.addDays(c,i), j=new Date(d+'T00:00:00Z').getUTCDay();
+    if(j===0||j===6) continue;
+    const fer=cfg.feries[d];
+    opts.push(`<option value="${d}"${fer?' disabled':''}>${libelleJour(d)}${fer?' (férié)':''}</option>`);
+  }
+  selB.innerHTML=opts.join('');
+  selB.value=[...selB.options].some(o=>o.value===avant&&!o.disabled)?avant:([...selB.options].some(o=>o.value===defaut&&!o.disabled)?defaut:(selB.options[0]||{}).value);
+}
+
+const estAutonome=m=>cfg.titulaires.some(t=>t.code===m&&t.autonome);
+// Lignes d'un même groupe (consultation, jour de bloc, MAR à qui ils sont confiés)
+const nbP=l=>l.nb||1;
+const memeGroupe=(l,c,b,d)=>l.consult===c&&l.bloc===b&&(l.donneA||'')===(d||'');
+function libFusion(lignes,extra){
+  const infos=[...new Set(lignes.map(l=>l.info).filter(Boolean))].join(' · ');
+  return Object.assign({consult:lignes[0].consult,bloc:lignes[0].bloc,info:infos,manuel:lignes.some(l=>l.manuel)},extra);
+}
+function libDonner(c,b){
+  if(!peut('tout')) return refuse();
+  const k=parseInt(document.getElementById(`don-n-${c}-${b}`).value,10), m=document.getElementById(`don-m-${c}-${b}`).value;
+  const lignes=cfg.liberales.filter(l=>memeGroupe(l,c,b,''));
+  const N=lignes.reduce((a,l)=>a+nbP(l),0);
+  if(!(k>=1&&k<=N)){toast(`Nombre à donner : de 1 à ${N}`);return;}
+  if(!m){toast('Choisir le MAR qui reçoit les patients');return;}
+  if(estAutonome(m)){toast(`${m} est autonome : il ne reçoit pas de patients`);return;}
+  const reste=cfg.liberales.filter(l=>!memeGroupe(l,c,b,''));
+  const deja=reste.filter(l=>memeGroupe(l,c,b,m));
+  const autres=reste.filter(l=>!memeGroupe(l,c,b,m));
+  const nouv=[];
+  if(N-k>0) nouv.push(libFusion(lignes,{nb:N-k}));
+  nouv.push(libFusion(lignes.concat(deja),{nb:k+deja.reduce((a,l)=>a+nbP(l),0),donneA:m}));
+  cfg.liberales=autres.concat(nouv);
+  changed();toast(`${k} patient(s) du ${E.labelFR(b)} confié(s) à ${m}`);
+}
+function libReprendre(c,b,m){
+  if(!peut('tout')) return refuse();
+  const donnes=cfg.liberales.filter(l=>memeGroupe(l,c,b,m)), gardes=cfg.liberales.filter(l=>memeGroupe(l,c,b,''));
+  const autres=cfg.liberales.filter(l=>!memeGroupe(l,c,b,m)&&!memeGroupe(l,c,b,''));
+  cfg.liberales=autres.concat([libFusion(gardes.concat(donnes),{nb:gardes.concat(donnes).reduce((a,l)=>a+nbP(l),0)})]);
+  changed();toast(`Patients du ${E.labelFR(b)} repris par le MAR de la consultation`);
+}
+function libDelGroupe(c,b,m){
+  if(!peut('tout')) return refuse();
+  if(!confirm(`Supprimer ces patients (consultation ${E.labelFR(c)}, bloc ${E.labelFR(b)}) ?`)) return;
+  cfg.liberales=cfg.liberales.filter(l=>!memeGroupe(l,c,b,m));changed();
+}
+function libOuvrirDon(id){const e=document.getElementById(id);if(e)e.hidden=!e.hidden;}
 function libClear(){
   if(!peut('tout')) return refuse();
   if(!confirm('Effacer tous les patients libéraux ?')) return;
@@ -1170,31 +1263,82 @@ function libClear(){
 }
 function jourCourt(d){return new Date(d+'T00:00:00Z').toLocaleDateString('fr-FR',{weekday:'short',timeZone:'UTC'});}
 function renderLib(){
+  libMenus();
   try{if(!cfg.libSource)cfg.libSource=localStorage.getItem(STORE_KEY+'_libsrc')||'';}catch(e){}
   document.getElementById('lib-src').textContent=cfg.libSource||'';
   const rows=cfg.liberales||[];
   const st=E.liberaleStatus(result);
-  const idx=rows.map((r,i)=>i).sort((a,b)=>(rows[a].consult+rows[a].bloc).localeCompare(rows[b].consult+rows[b].bloc)||a-b);
-  let ok=0,ko=0,off=0;
-  let h=`<thead><tr><th class="l">Consultation</th><th class="l">Bloc</th><th>Créneau</th><th>MAR</th><th class="l">Examen / infos</th><th class="l">Contrôle</th><th></th></tr></thead><tbody>`;
-  idx.forEach(i=>{
-    const r=rows[i], x=st[i];
-    let stat;
-    if(x.statut==='ok'){stat=`<span class="st-ok">✅ ${esc(x.raison)}</span>`;ok++;}
-    else if(x.statut==='alerte'){stat=`<span class="st-warn">⚠️ ${esc(x.raison)}</span>`;ko++;}
-    else{stat=`<span class="st-off">${esc(x.raison)}</span>`;off++;}
-    h+=`<tr><td class="l" style="white-space:nowrap"><b>${E.labelFR(r.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(r.consult))}</span>${r.manuel?' <small style="color:var(--t3)">(manuel)</small>':''}</td>
-      <td class="l" style="white-space:nowrap"><b>${E.labelFR(r.bloc)}</b> <span style="color:var(--t3)">${esc(jourCourt(r.bloc))}</span></td>
-      <td>${x.slot?esc(x.slot.label):'—'}</td><td>${x.med?chip(x.med):'—'}</td>
-      <td class="l" style="font-size:11px;color:var(--t2)">${esc(r.info||'')}</td><td class="l">${stat}</td>
-      <td><button class="del admin-only" title="Supprimer" onclick="libDel(${i})">×</button></td></tr>`;
+  // Regroupement : consultation → (jour de bloc, MAR confié) → nombre de patients
+  const groupes={};
+  rows.forEach((r,i)=>{
+    const g=(groupes[r.consult]=groupes[r.consult]||{consult:r.consult,lignes:{},statut:st[i]});
+    const k=r.bloc+'|'+(r.donneA||'');
+    const l=(g.lignes[k]=g.lignes[k]||{bloc:r.bloc,donneA:r.donneA||'',nb:0,infos:new Set(),st:st[i]});
+    l.nb+=nbP(r); if(r.info) l.infos.add(r.info);
+    if(st[i].statut==='alerte') l.st=st[i];
   });
-  if(!rows.length) h+=`<tr><td colspan="7" style="color:var(--t3);padding:14px">Aucun patient libéral chargé.</td></tr>`;
+  const slotLib=date=>{for(const w of result.weeks)for(const s of E.SLOTS){const c=w.slots[s.id];if(c.date===date&&E.SLOT_LIBERALE[s.dow]===s.id)return c;}return null;};
+  let ok=0,ko=0,off=0,total=0,aDon=0;
+  let h=`<thead><tr><th class="l">Consultation</th><th class="l">Jour de bloc</th><th>Patients</th><th>MAR au bloc</th><th class="l">Contrôle</th><th class="admin-only"></th></tr></thead><tbody>`;
+  Object.values(groupes).sort((x,y)=>x.consult.localeCompare(y.consult)).forEach(g=>{
+    const x=g.statut, lignes=Object.values(g.lignes).sort((p,q)=>(p.bloc+p.donneA).localeCompare(q.bloc+q.donneA));
+    const nbTot=lignes.reduce((a,l)=>a+l.nb,0);
+    // Proposition : patients à donner selon le MAR (règles du mardi / jeudi-C1 d'abord)
+    const c=slotLib(g.consult);
+    let propo='';
+    if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force){
+      const cand=codes().map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0}));
+      const possibles=cand.filter(v=>!v.ex).sort((p,q)=>p.n-q.n);
+      const imp=cand.filter(v=>v.ex);
+      propo=`<b>Patients à donner selon le MAR</b> : `+possibles.map(v=>`<span style="${v.t===x.med?'font-weight:700;color:#1a7f37':''}">${v.t===x.med?'✓ ':''}${esc(v.t)} ${v.n}</span>`).join(' · ')
+        +(imp.length?` <span style="color:var(--t3)">· impossible : ${imp.map(v=>esc(v.t)+' ('+esc(v.ex.toLowerCase())+')').join(', ')}</span>`:'');
+      const choisi=possibles.find(v=>v.t===x.med);
+      if(choisi&&possibles.length&&choisi.n>possibles[0].n)
+        propo+=`<div style="color:var(--t3)">${esc(possibles[0].t)} aurait moins de patients à donner, mais le retenir obligerait un « Autre MAR » un autre mardi ou jeudi, ou ferait passer GR sous sa part minimale (règles prioritaires).</div>`;
+    }
+    h+=`<tr style="background:var(--bg)"><td class="l" style="white-space:nowrap"><b>${E.labelFR(g.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(g.consult))}</span></td>
+      <td class="l" colspan="2" style="font-size:12px">${x.slot?esc(x.slot.label):'—'} · ${nbTot} patient(s)</td>
+      <td>${x.med?chip(x.med):'—'}<div style="font-size:10px;color:var(--t3)">en consultation</div></td>
+      <td class="l" colspan="2" style="font-size:11px;color:var(--t2)">${propo}</td></tr>`;
+    lignes.forEach(l=>{
+      const y=l.st, cle=`${g.consult}-${l.bloc}`;
+      total+=l.nb;
+      let stat;
+      if(y.statut==='ok'){stat=`<span class="st-ok">✅ ${esc(y.raison)}</span>`;ok+=l.nb;}
+      else if(y.aDonner){stat=`<span class="st-warn">🔁 ${esc(y.raison)} — cliquer « Donner… »</span>`;aDon+=l.nb;}
+      else if(y.statut==='alerte'){stat=`<span class="st-warn">⚠️ ${esc(y.raison)}</span>`;ko+=l.nb;}
+      else{stat=`<span class="st-off">${esc(y.raison)}</span>`;off+=l.nb;}
+      const op=l.donneA||x.med;
+      const actions=l.donneA
+        ?`<button class="btn" style="padding:2px 8px" onclick="libReprendre('${g.consult}','${l.bloc}','${esc(l.donneA)}')" title="Rendre ces patients au MAR de la consultation">↩ Reprendre</button>`
+        :(y.statut==='hors'?'':estAutonome(x.med)?`<span style="font-size:11px;color:var(--t3)">${esc(x.med)} autonome</span>`:`<button class="btn" style="padding:2px 8px" onclick="libOuvrirDon('don-${cle}')">Donner…</button>`);
+      h+=`<tr><td></td><td class="l" style="white-space:nowrap"><b>${E.labelFR(l.bloc)}</b> <span style="color:var(--t3)">${esc(jourCourt(l.bloc))}</span>${l.infos.size?`<div style="font-size:10px;color:var(--t3)">${esc([...l.infos].join(' · '))}</div>`:''}</td>
+        <td><b>${l.nb}</b>${l.donneA?'<div style="font-size:10px;color:var(--t3)">confiés</div>':''}</td>
+        <td>${op?chip(op):'—'}</td><td class="l">${stat}</td>
+        <td class="admin-only" style="white-space:nowrap">${actions}<button class="del" title="Supprimer" onclick="libDelGroupe('${g.consult}','${l.bloc}','${esc(l.donneA)}')">×</button></td></tr>`;
+      if(!l.donneA&&y.statut!=='hors'&&!estAutonome(x.med)){
+        // MAR présents le jour de la consultation ET le jour du bloc
+        const opts=codes().map(t=>{
+          const ic=(cfg.indispos[t]||[]).includes(g.consult), ib=(cfg.indispos[t]||[]).includes(l.bloc);
+          const raison=estAutonome(t)?'autonome, ne reçoit pas de patients':ic&&ib?'absent le '+E.labelFR(g.consult)+' et le '+E.labelFR(l.bloc):ic?'absent le jour de la consultation':ib?'absent le jour du bloc':'';
+          return `<option value="${esc(t)}"${raison?' disabled':''}>${esc(t)}${raison?' ('+raison+')':''}</option>`;
+        }).join('');
+        const premierDispo=codes().find(t=>!estAutonome(t)&&!(cfg.indispos[t]||[]).includes(g.consult)&&!(cfg.indispos[t]||[]).includes(l.bloc));
+        h+=`<tr id="don-${cle}" class="admin-only" hidden><td></td><td colspan="5" class="l"><div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+          Donner <select id="don-n-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${Array.from({length:l.nb},(_,i)=>`<option${i+1===l.nb?' selected':''}>${i+1}</option>`).join('')}</select> patient(s) sur ${l.nb}
+          à <select id="don-m-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${premierDispo?'':'<option value="">— aucun MAR disponible —</option>'}${opts.replace(`value="${premierDispo}"`,`value="${premierDispo}" selected`)}</select>
+          <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.consult}','${l.bloc}')"${premierDispo?'':' disabled'}>Confirmer</button>
+          <span style="color:var(--t3)">Le MAR choisi doit être présent le ${E.labelFR(g.consult)} (consultation) et le ${E.labelFR(l.bloc)} (bloc, sans consultation ce jour-là).</span></div></td></tr>`;
+      }
+    });
+  });
+  if(!rows.length) h+=`<tr><td colspan="6" style="color:var(--t3);padding:14px">Aucun patient libéral.</td></tr>`;
   document.getElementById('lib-tbl').innerHTML=h+'</tbody>';
   document.getElementById('lib-sum').innerHTML=rows.length?`<div class="stats">
-    <div class="stat"><div class="stat-l">Patients</div><div class="stat-v">${rows.length}</div></div>
-    <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">MAR disponible au bloc</div><div class="stat-v">${ok}</div></div>
-    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, MAR absent, date incohérente</div></div>
+    <div class="stat"><div class="stat-l">Patients</div><div class="stat-v">${total}</div></div>
+    <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">MAR présent au bloc</div><div class="stat-v">${ok}</div></div>
+    <div class="stat" style="border-top:3px solid #d4a72c"><div class="stat-l">À donner</div><div class="stat-v">${aDon}</div><div class="stat-s">MAR de la consultation absent ce jour de bloc</div></div>
+    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, date incohérente…</div></div>
     <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
   </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r admin-only" onclick="libClear()">Effacer tout</button></div>`:'';
 }

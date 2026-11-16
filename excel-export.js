@@ -98,6 +98,10 @@
         if (j && !j.ferie && !j.bloc.includes(s.med) && !j.absents.includes(s.med)) j.bloc.push(s.med);
       });
     }));
+    // MAR à qui des patients libéraux ont été confiés
+    jours.forEach(j => Object.keys((cfg.blocConfie || {})[j.date] || {}).forEach(m => {
+      if (!j.ferie && !j.bloc.includes(m) && !j.absents.includes(m)) j.bloc.push(m);
+    }));
     return jours;
   }
 

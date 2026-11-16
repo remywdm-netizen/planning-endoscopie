@@ -188,19 +188,34 @@ const withLib = liberales => {
   return E.generate(cfg);
 };
 
-test('patient libéral : MAR indisponible le jour du bloc écarté de la consultation', () => {
-  // Mardi 24/11 : le MAR calculé est X ; on importe un patient opéré un jour où X est indisponible
+test('patient libéral : le MAR retenu est celui qui a le moins de patients à donner', () => {
+  // Mardi 24/11 : le MAR calculé est X ; on importe 2 patients opérés un jour où X est absent
   const x = slot('2026-11-23', 'mar').med;
   assert.ok(E.isTitulaire(x));
   const bloc = E.DEFAULT_CONFIG.indispos[x].find(d => d > '2026-11-24' && !E.DEFAULT_CONFIG.feries[d]);
   assert.ok(bloc, 'une indisponibilité de ' + x + ' après le 24/11');
-  const r = withLib([{ consult: '2026-11-24', bloc, info: 'Coloscopie' }]);
-  const w = r.weeks.find(y => y.monday === '2026-11-23');
-  assert.notEqual(w.slots.mar.med, x);
-  assert.match(w.slots.mar.exclus[x], new RegExp('Indisponible le ' + E.labelFR(bloc).replace('/', '\\/')));
+  const r = withLib([{ consult: '2026-11-24', bloc, nb: 2, info: 'Coloscopie' }]);
+  const c = r.weeks.find(y => y.monday === '2026-11-23').slots.mar;
+  assert.equal(c.aDonner[x], 2, x + ' aurait 2 patients à donner');
+  // Le MAR choisi a le minimum de patients à donner parmi les titulaires possibles ce mardi
+  const possibles = E.TITULAIRES.filter(t => !c.exclus[t]);
+  const mini = Math.min(...possibles.map(t => c.aDonner[t] || 0));
+  if (E.isTitulaire(c.med)) assert.equal(c.aDonner[c.med] || 0, mini, JSON.stringify(c.aDonner));
   assert.deepEqual(E.verify(r), []);
-  const st = E.liberaleStatus(r);
-  assert.equal(st[0].slot.id, 'mar');
+  assert.equal(E.liberaleStatus(r)[0].slot.id, 'mar');
+});
+
+test('patient libéral : à défaut, un MAR absent au bloc plutôt qu\'« Autre MAR », avec patients à donner', () => {
+  // Mardi 01/12 : RW absent ce jour-là ; SG et GR possibles. 3 patients opérés le 11/12 (SG et GR absents).
+  const r = withLib([{ consult: '2026-12-01', bloc: '2026-12-11', nb: 3 }]);
+  const c = r.weeks.find(y => y.monday === '2026-11-30').slots.mar;
+  assert.notEqual(c.med, E.AUTRE, 'règle du mardi : un titulaire');
+  assert.equal(c.med, 'SG', 'GR autonome ne peut pas donner : SG retenu');
+  assert.ok(E.alertes(r).some(a => /3 patient\(s\) du 11\/12 à donner \(SG absent/.test(a)), JSON.stringify(E.alertes(r)));
+  const st = E.liberaleStatus(r)[0];
+  assert.equal(st.statut, 'alerte');
+  assert.ok(st.aDonner);
+  assert.deepEqual(E.verify(r), []);
 });
 
 test('patient libéral : le MAR est au bloc ce jour-là, pas en consultation', () => {
@@ -233,7 +248,7 @@ test('patient libéral : forçage incompatible signalé en alerte', () => {
   cfg.overrides['2026-11-23'] = { mar: 'SG' }; // SG indisponible le 30/11
   const r = E.generate(cfg);
   assert.deepEqual(E.verify(r), []);
-  assert.ok(E.alertes(r).some(a => /SG voit des patients libéraux opérés le 30\/11/.test(a)));
+  assert.ok(E.alertes(r).some(a => /patient\(s\) du 30\/11 à donner \(SG absent/.test(a)), JSON.stringify(E.alertes(r)));
   assert.equal(E.liberaleStatus(r)[0].statut, 'alerte');
 });
 
@@ -369,4 +384,80 @@ test('patient libéral vu un jour où le créneau est fermé : alerte', () => {
   const st = E.liberaleStatus(E.generate(cfg));
   assert.equal(st[0].statut, 'alerte');
   assert.match(st[0].raison, /fermé/);
+});
+
+// 4 MAR (AB sans indisponibilité) : GR est autonome, il faut un autre MAR pour recevoir des patients
+const cfg4 = (liberales = []) => {
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.titulaires.push({ code: 'AB', couleur: '#000', max: 2 });
+  cfg.indispos.AB = [];
+  cfg.liberales = liberales;
+  return cfg;
+};
+
+test('patients libéraux confiés : le MAR de la consultation n\'a plus à être au bloc', () => {
+  const base = E.generate(cfg4());
+  const x = base.weeks.find(w => w.monday === '2026-11-23').slots.mar.med;
+  assert.ok(E.isTitulaire(x, base.config));
+  const bloc = (base.config.indispos[x] || []).find(d => d > '2026-11-24' && !E.DEFAULT_CONFIG.feries[d]);
+  assert.ok(bloc, 'une indisponibilité de ' + x + ' après le 24/11');
+  // Sans don : X écarté de la consultation (absent un jour de bloc)
+  const sans = E.generate(cfg4([{ consult: '2026-11-24', bloc, nb: 3 }]));
+  assert.notEqual(sans.weeks.find(w => w.monday === '2026-11-23').slots.mar.med, x);
+  // Les 3 patients confiés à un MAR non autonome présent ce jour-là : X n'est plus écarté
+  const y = ['RW', 'SG', 'AB'].find(t => t !== x && !(base.config.indispos[t] || []).includes(bloc) && !(base.config.indispos[t] || []).includes('2026-11-24'));
+  const avec = E.generate(cfg4([{ consult: '2026-11-24', bloc, nb: 3, donneA: y }]));
+  const w = avec.weeks.find(v => v.monday === '2026-11-23');
+  assert.ok(!w.slots.mar.exclus[x] || !/patient libéral/.test(w.slots.mar.exclus[x]));
+  assert.deepEqual(E.verify(avec), []);
+  // Y est au bloc ce jour-là : aucune consultation pour lui
+  avec.weeks.forEach(v => E.SLOTS.forEach(s => {
+    if (v.slots[s.id].date === bloc) assert.notEqual(v.slots[s.id].med, y, `${bloc} ${s.id}`);
+  }));
+  const st = E.liberaleStatus(avec)[0];
+  assert.equal(st.statut, 'ok', st.raison);
+  assert.equal(st.operateur, y);
+  assert.match(st.raison, /confiés à/);
+});
+
+test('patients libéraux : une partie confiée, le reste garde la contrainte de présence', () => {
+  const base = E.generate(cfg4());
+  const x = base.weeks.find(w => w.monday === '2026-11-23').slots.mar.med;
+  const bloc = (base.config.indispos[x] || []).find(d => d > '2026-11-24' && !E.DEFAULT_CONFIG.feries[d]);
+  const y = ['RW', 'SG', 'AB'].find(t => t !== x && !(base.config.indispos[t] || []).includes(bloc));
+  const r = E.generate(cfg4([{ consult: '2026-11-24', bloc, nb: 2 }, { consult: '2026-11-24', bloc, nb: 1, donneA: y }]));
+  assert.notEqual(r.weeks.find(v => v.monday === '2026-11-23').slots.mar.med, x, 'X doit encore être au bloc pour 2 patients');
+  assert.deepEqual(E.verify(r), []);
+});
+
+test('patients confiés à un MAR indisponible ce jour-là : alerte', () => {
+  const r = withLib([{ consult: '2026-11-24', bloc: '2026-12-14', nb: 2, donneA: 'RW' }]); // RW indisponible le 14/12
+  assert.ok(E.alertes(r).some(a => /RW reçoit des patients libéraux mais est indisponible/.test(a)));
+  assert.equal(E.liberaleStatus(r)[0].statut, 'alerte');
+});
+
+test('patients confiés : le MAR qui les reçoit doit être présent le jour de la consultation', () => {
+  // Consultation mardi 03/11 : RW et GR indisponibles ce jour-là ; patients confiés à RW → alerte
+  const r = withLib([{ consult: '2026-11-03', bloc: '2026-11-05', nb: 2, donneA: 'RW' }]);
+  assert.ok(E.alertes(r).some(a => /RW reçoit des patients libéraux vus ce jour-là mais est indisponible/.test(a)), JSON.stringify(E.alertes(r)));
+  const st = E.liberaleStatus(r)[0];
+  assert.equal(st.statut, 'alerte');
+  assert.match(st.raison, /jour de la consultation/);
+});
+
+test('GR autonome : ne donne ni ne reçoit de patients libéraux', () => {
+  assert.ok(E.DEFAULT_CONFIG.titulaires.find(t => t.code === 'GR').autonome);
+  // GR ne reçoit pas : alerte si des patients lui sont confiés
+  const r1 = withLib([{ consult: '2026-11-24', bloc: '2026-11-25', nb: 2, donneA: 'GR' }]);
+  assert.ok(E.alertes(r1).some(a => /GR est autonome et ne reçoit pas/.test(a)));
+  assert.equal(E.liberaleStatus(r1)[0].statut, 'alerte');
+  // GR ne donne pas : une consultation avec des patients confiés n'est jamais attribuée à GR
+  const w0 = week('2026-11-23');
+  const jeudi = w0.slots.jeu1; // jeudi 26/11
+  assert.equal(jeudi.med, 'GR', 'GR fait le jeudi-C1 du 26/11 sans patients confiés');
+  const r2 = withLib([{ consult: '2026-11-26', bloc: '2026-12-01', nb: 2, donneA: 'SG' }]);
+  const j2 = r2.weeks.find(w => w.monday === '2026-11-23').slots.jeu1;
+  assert.notEqual(j2.med, 'GR');
+  assert.match(j2.exclus.GR, /Autonome/);
+  assert.deepEqual(E.verify(r2), []);
 });
