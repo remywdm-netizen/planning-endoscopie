@@ -236,7 +236,7 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale choisie (mardi, jeudi-Consult. 1, mercredi, lundi-Consult. 1 ou lundi-Consult. 2) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
     <label class="drop" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
@@ -550,7 +550,7 @@ function renderPlan(){
       const ex=Object.entries(c.exclus).map(([t,r])=>`${t} : ${r}`).join('\n');
       const tip=ex?`Exclus le ${E.labelFR(c.date)} :\n${ex}`:`Tous les titulaires disponibles le ${E.labelFR(c.date)}`;
       const ftip=c.force?`\n📌 Forcé manuellement — cliquer pour modifier`:`\nCliquer pour forcer un praticien`;
-      const nb=(c.blocs||[]).length?(cfg.liberales||[]).filter(l=>l.consult===c.date&&l.bloc>l.consult).length:0;
+      const nb=(c.blocs||[]).length?(cfg.liberales||[]).filter(l=>l.consult===c.date&&E.creneauLib(l)===s.id&&l.bloc>l.consult&&!l.donneA).reduce((a,l)=>a+(l.nb||1),0):0;
       const pres=nb>0;
       const ptip=pres?`\n🩺 ${nb} patient(s) libéral(aux) — bloc le ${c.blocs.map(E.labelFR).join(', ')}`:'';
       h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺<span class="lg"> ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span></span>`:''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
@@ -1099,13 +1099,13 @@ function libFile(f){
   rd.readAsArrayBuffer(f);
 }
 function libAddManual(){
-  const c=document.getElementById('lib-c').value, b=document.getElementById('lib-b').value;
+  const garderC=document.getElementById('lib-c').value;
+  const [c,slot]=garderC.split('|'), b=document.getElementById('lib-b').value;
   const n=parseInt(document.getElementById('lib-n').value,10);
-  const garderC=c;
   if(!c||!b){toast('Saisir la date de consultation et la date de bloc');return;}
   if(!(n>=1&&n<=50)){toast('Nombre de patients : de 1 à 50');return;}
   if(b<=c){toast('Le jour de bloc doit être après la consultation');return;}
-  cfg.liberales=(cfg.liberales||[]).concat([{consult:c,bloc:b,nb:n,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
+  cfg.liberales=(cfg.liberales||[]).concat([{consult:c,slot,bloc:b,nb:n,info:document.getElementById('lib-i').value.trim(),manuel:true}]);
   document.getElementById('lib-i').value='';
   changed();
   document.getElementById('lib-c').value=garderC;libMajBloc();
@@ -1120,8 +1120,8 @@ function libMenus(){
   const opts=[];
   result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
     const c=w.slots[s.id];
-    if(E.SLOT_LIBERALE[s.dow]!==s.id||c.ferie||c.ferme||c.horsPeriode) return;
-    opts.push(`<option value="${c.date}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
+    if(!E.SLOTS_LIBERAUX.includes(s.id)||c.ferie||c.ferme||c.horsPeriode) return;
+    opts.push(`<option value="${c.date}|${s.id}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
   }));
   selC.innerHTML=opts.join('');
   const auj=new Date().toISOString().slice(0,10);
@@ -1132,7 +1132,7 @@ function libMenus(){
   libMajBloc();
 }
 function libMajBloc(){
-  const c=document.getElementById('lib-c').value, selB=document.getElementById('lib-b');
+  const c=document.getElementById('lib-c').value.split('|')[0], selB=document.getElementById('lib-b');
   const avant=selB.value; selB.innerHTML='';
   if(!c) return;
   const dow=(new Date(c+'T00:00:00Z').getUTCDay()+6)%7;
@@ -1151,13 +1151,16 @@ function libMajBloc(){
 const estAutonome=m=>cfg.titulaires.some(t=>t.code===m&&t.autonome);
 // Lignes d'un même groupe (consultation, jour de bloc, MAR à qui ils sont confiés)
 const nbP=l=>l.nb||1;
-const memeGroupe=(l,c,b,d)=>l.consult===c&&l.bloc===b&&(l.donneA||'')===(d||'');
+// k = « date|créneau » de la consultation (lundi : Lun. C1 ou Lun. C2)
+const cleDe=l=>l.consult+'|'+E.creneauLib(l);
+const memeGroupe=(l,k,b,d)=>cleDe(l)===k&&l.bloc===b&&(l.donneA||'')===(d||'');
 function libFusion(lignes,extra){
   const infos=[...new Set(lignes.map(l=>l.info).filter(Boolean))].join(' · ');
-  return Object.assign({consult:lignes[0].consult,bloc:lignes[0].bloc,info:infos,manuel:lignes.some(l=>l.manuel)},extra);
+  return Object.assign({consult:lignes[0].consult,slot:E.creneauLib(lignes[0]),bloc:lignes[0].bloc,info:infos,manuel:lignes.some(l=>l.manuel)},extra);
 }
+const idDe=(k,b)=>k.replace('|','-')+'-'+b;
 function libDonner(c,b){
-  const k=parseInt(document.getElementById(`don-n-${c}-${b}`).value,10), m=document.getElementById(`don-m-${c}-${b}`).value;
+  const k=parseInt(document.getElementById(`don-n-${idDe(c,b)}`).value,10), m=document.getElementById(`don-m-${idDe(c,b)}`).value;
   const lignes=cfg.liberales.filter(l=>memeGroupe(l,c,b,''));
   const N=lignes.reduce((a,l)=>a+nbP(l),0);
   if(!(k>=1&&k<=N)){toast(`Nombre à donner : de 1 à ${N}`);return;}
@@ -1179,7 +1182,7 @@ function libReprendre(c,b,m){
   changed();toast(`Patients du ${E.labelFR(b)} repris par le MAR de la consultation`);
 }
 function libDelGroupe(c,b,m){
-  if(!confirm(`Supprimer ces patients (consultation ${E.labelFR(c)}, bloc ${E.labelFR(b)}) ?`)) return;
+  if(!confirm(`Supprimer ces patients (consultation ${E.labelFR(c.split('|')[0])}, bloc ${E.labelFR(b)}) ?`)) return;
   cfg.liberales=cfg.liberales.filter(l=>!memeGroupe(l,c,b,m));changed();
 }
 function libOuvrirDon(id){const e=document.getElementById(id);if(e)e.hidden=!e.hidden;}
@@ -1199,20 +1202,21 @@ function renderLib(){
   // Regroupement : consultation → (jour de bloc, MAR confié) → nombre de patients
   const groupes={};
   rows.forEach((r,i)=>{
-    const g=(groupes[r.consult]=groupes[r.consult]||{consult:r.consult,lignes:{},statut:st[i]});
+    const kc=cleDe(r);
+    const g=(groupes[kc]=groupes[kc]||{cle:kc,consult:r.consult,slot:E.creneauLib(r),lignes:{},statut:st[i]});
     const k=r.bloc+'|'+(r.donneA||'');
     const l=(g.lignes[k]=g.lignes[k]||{bloc:r.bloc,donneA:r.donneA||'',nb:0,infos:new Set(),st:st[i]});
     l.nb+=nbP(r); if(r.info) l.infos.add(r.info);
     if(st[i].statut==='alerte') l.st=st[i];
   });
-  const slotLib=date=>{for(const w of result.weeks)for(const s of E.SLOTS){const c=w.slots[s.id];if(c.date===date&&E.SLOT_LIBERALE[s.dow]===s.id)return c;}return null;};
+  const slotLib=(date,id)=>{for(const w of result.weeks){const c=w.slots[id];if(c&&c.date===date)return c;}return null;};
   let ok=0,ko=0,off=0,total=0,aDon=0;
   let h=`<thead><tr><th class="l">Consultation</th><th class="l">Jour de bloc</th><th>Patients</th><th>MAR au bloc</th><th class="l">Contrôle</th><th></th></tr></thead><tbody>`;
-  Object.values(groupes).sort((x,y)=>x.consult.localeCompare(y.consult)).forEach(g=>{
+  Object.values(groupes).sort((x,y)=>x.cle.localeCompare(y.cle)).forEach(g=>{
     const x=g.statut, lignes=Object.values(g.lignes).sort((p,q)=>(p.bloc+p.donneA).localeCompare(q.bloc+q.donneA));
     const nbTot=lignes.reduce((a,l)=>a+l.nb,0);
     // Proposition : patients à donner selon le MAR (règles du mardi / jeudi-C1 d'abord)
-    const c=slotLib(g.consult);
+    const c=slotLib(g.consult,g.slot);
     let propo='';
     if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force){
       const cand=codes().map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0}));
@@ -1229,7 +1233,7 @@ function renderLib(){
       <td>${x.med?chip(x.med):'—'}<div style="font-size:10px;color:var(--t3)">en consultation</div></td>
       <td class="l" colspan="2" style="font-size:11px;color:var(--t2)">${propo}</td></tr>`;
     lignes.forEach(l=>{
-      const y=l.st, cle=`${g.consult}-${l.bloc}`;
+      const y=l.st, cle=idDe(g.cle,l.bloc);
       total+=l.nb;
       let stat;
       if(y.statut==='ok'){stat=`<span class="st-ok">✅ ${esc(y.raison)}</span>`;ok+=l.nb;}
@@ -1238,12 +1242,12 @@ function renderLib(){
       else{stat=`<span class="st-off">${esc(y.raison)}</span>`;off+=l.nb;}
       const op=l.donneA||x.med;
       const actions=l.donneA
-        ?`<button class="btn" style="padding:2px 8px" onclick="libReprendre('${g.consult}','${l.bloc}','${esc(l.donneA)}')" title="Rendre ces patients au MAR de la consultation">↩ Reprendre</button>`
+        ?`<button class="btn" style="padding:2px 8px" onclick="libReprendre('${g.cle}','${l.bloc}','${esc(l.donneA)}')" title="Rendre ces patients au MAR de la consultation">↩ Reprendre</button>`
         :(y.statut==='hors'?'':estAutonome(x.med)?`<span style="font-size:11px;color:var(--t3)">${esc(x.med)} autonome</span>`:`<button class="btn" style="padding:2px 8px" onclick="libOuvrirDon('don-${cle}')">Donner…</button>`);
       h+=`<tr><td></td><td class="l" style="white-space:nowrap"><b>${E.labelFR(l.bloc)}</b> <span style="color:var(--t3)">${esc(jourCourt(l.bloc))}</span>${l.infos.size?`<div style="font-size:10px;color:var(--t3)">${esc([...l.infos].join(' · '))}</div>`:''}</td>
         <td><b>${l.nb}</b>${l.donneA?'<div style="font-size:10px;color:var(--t3)">confiés</div>':''}</td>
         <td>${op?chip(op):'—'}</td><td class="l">${stat}</td>
-        <td style="white-space:nowrap">${actions}<button class="del" title="Supprimer" onclick="libDelGroupe('${g.consult}','${l.bloc}','${esc(l.donneA)}')">×</button></td></tr>`;
+        <td style="white-space:nowrap">${actions}<button class="del" title="Supprimer" onclick="libDelGroupe('${g.cle}','${l.bloc}','${esc(l.donneA)}')">×</button></td></tr>`;
       if(!l.donneA&&y.statut!=='hors'&&!estAutonome(x.med)){
         // MAR présents le jour de la consultation ET le jour du bloc
         const opts=codes().map(t=>{
@@ -1255,7 +1259,7 @@ function renderLib(){
         h+=`<tr id="don-${cle}" hidden><td></td><td colspan="5" class="l"><div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
           Donner <select id="don-n-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${Array.from({length:l.nb},(_,i)=>`<option${i+1===l.nb?' selected':''}>${i+1}</option>`).join('')}</select> patient(s) sur ${l.nb}
           à <select id="don-m-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${premierDispo?'':'<option value="">— aucun MAR disponible —</option>'}${opts.replace(`value="${premierDispo}"`,`value="${premierDispo}" selected`)}</select>
-          <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.consult}','${l.bloc}')"${premierDispo?'':' disabled'}>Confirmer</button>
+          <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.cle}','${l.bloc}')"${premierDispo?'':' disabled'}>Confirmer</button>
           <span style="color:var(--t3)">Le MAR choisi doit être présent le ${E.labelFR(g.consult)} (consultation) et le ${E.labelFR(l.bloc)} (bloc, sans consultation ce jour-là).</span></div></td></tr>`;
       }
     });
