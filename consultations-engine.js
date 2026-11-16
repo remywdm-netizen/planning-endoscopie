@@ -126,6 +126,7 @@
     cfg.blocConfie = {};  // jour de bloc → { MAR : date de consultation } (patients confiés)
     cfg.autonomes = new Set(cfg.titulaires.filter(t => t.autonome).map(t => t.code));
     cfg.consultAvecDon = new Set(); // consultations dont des patients sont confiés à un autre MAR
+    cfg.libNb = {};       // date de consultation → { jour de bloc : nombre de patients non confiés }
     (cfg.liberales || []).forEach(l => {
       if (!l || !l.consult || !l.bloc || l.bloc <= l.consult || (l.nb != null && Number(l.nb) <= 0)) return;
       if (l.donneA) {
@@ -135,6 +136,8 @@
       }
       const set = (cfg.libMap[l.consult] = cfg.libMap[l.consult] || []);
       if (!set.includes(l.bloc)) set.push(l.bloc);
+      const nb = (cfg.libNb[l.consult] = cfg.libNb[l.consult] || {});
+      nb[l.bloc] = (nb[l.bloc] || 0) + (Number(l.nb) || 1);
     });
     Object.values(cfg.libMap).forEach(a => a.sort());
     return cfg;
@@ -207,6 +210,14 @@
     }
     return best;
   }
+  // Patients libéraux d'une consultation que le MAR t devrait donner, car il est
+  // absent un de leurs jours de bloc. « Autre MAR » : tous ses patients.
+  function patientsADonner(cfg, indispoT, date, t) {
+    const nb = cfg.libNb[date] || {};
+    if (t === AUTRE) return Object.values(nb).reduce((a, n) => a + n, 0);
+    return Object.entries(nb).reduce((a, [b, n]) => a + (indispoT && indispoT.has(b) ? n : 0), 0);
+  }
+
   // Plan optimal des libérales sur tout le trimestre (programmation dynamique) :
   // le moins d'"Autre MAR", puis la part minimale (ex. GR 30 %), puis l'équilibre.
   // Contraintes prises en compte : indisponibilités le jour de la consultation et
@@ -240,12 +251,16 @@
       etapes.push(sl.map(x => {
         if (!x.actif) return Object.assign(x, { options: [null] });
         if (x.force) return Object.assign(x, { options: [x.force] });
+        // Obligatoire : présent le jour de la consultation et le jour de bloc de report.
+        // Patients libéraux : un MAR absent un de leurs jours de bloc reste possible,
+        // mais ces patients sont « à donner » (coût) — sauf MAR autonome (exclu).
         const rep = addDays(x.date, REPORT_BLOC[x.id].offset);
-        const blocs = (cfg.libMap[x.date] || []).concat(cfg.feries[rep] ? [] : [rep]);
         const confie = cfg.blocConfie[x.date] || {};
-        const ok = codes.filter(t => !indispo[t].has(x.date) && !confie[t] && !blocs.some(b => indispo[t].has(b))
-          && !(cfg.autonomes.has(t) && cfg.consultAvecDon.has(x.date)));
-        return Object.assign(x, { options: ok.concat([AUTRE]) });
+        const ok = codes.filter(t => !indispo[t].has(x.date) && !confie[t] && (cfg.feries[rep] || !indispo[t].has(rep))
+          && !(cfg.autonomes.has(t) && (cfg.consultAvecDon.has(x.date) || patientsADonner(cfg, indispo[t], x.date, t) > 0)));
+        const cout = {};
+        ok.concat([AUTRE]).forEach(t => { cout[t] = patientsADonner(cfg, indispo[t], x.date, t); });
+        return Object.assign(x, { options: ok.concat([AUTRE]), cout });
       }));
     }
     if (!etapes.length) return null;
@@ -253,17 +268,17 @@
     codes.forEach(t => { cible[t] = cfg.shareOf[t] * total; });
     const mini = {};
     cfg.titulaires.forEach(t => { if (t.part != null) mini[t.code] = minimumPart(t.part, total); });
-    const evalue = (n, autre) => {
+    const evalue = (n, autre, donner) => {
       let manque = 0, ecart = 0;
       codes.forEach((t, i) => {
         if (mini[t] != null) manque += Math.max(0, mini[t] - n[i]);
         ecart += (n[i] - cible[t]) ** 2;
       });
-      return [manque, autre, Math.round(ecart * 1e6)];
+      return [manque, autre, donner || 0, Math.round(ecart * 1e6)];
     };
     // états : clé = MAR du jeudi-C1 précédent + compteurs ; on garde le moins d'"Autre MAR"
     let etats = new Map();
-    etats.set(prev0 + '|' + codes.map(t => init[t]).join(','), { prev: prev0, n: codes.map(t => init[t]), autre: 0, choix: [] });
+    etats.set(prev0 + '|' + codes.map(t => init[t]).join(','), { prev: prev0, n: codes.map(t => init[t]), autre: 0, donner: 0, choix: [] });
     const FAISCEAU = codes.length <= 4 ? 4000 : 1200; // borne le nombre d'états gardés (rapidité)
     etapes.forEach(([mar, jeu]) => {
       const suivants = new Map();
@@ -273,8 +288,9 @@
           jeu.options.forEach(j => {
             if (m && j && m !== AUTRE && m === j) return;              // pas mardi ET jeudi-C1
             const n = e.n.slice();
-            let autre = e.autre;
+            let autre = e.autre, donner = e.donner;
             [[mar, m], [jeu, j]].forEach(([x, v]) => {
+              if (v && x.cout) donner += x.cout[v] || 0;
               if (!v || x.date < cfg.debutDecompte) return;
               if (v === AUTRE) autre++;
               const k = codes.indexOf(v);
@@ -283,20 +299,21 @@
             const prev = j && codes.includes(j) ? j : null;
             const cle = prev + '|' + n.join(',');
             const vu = suivants.get(cle);
-            if (!vu || autre < vu.autre) suivants.set(cle, { prev, n, autre, choix: e.choix.concat([[mar.date, m], [jeu.date, j]]) });
+            if (!vu || autre < vu.autre || (autre === vu.autre && donner < vu.donner))
+              suivants.set(cle, { prev, n, autre, donner, choix: e.choix.concat([[mar.date, m], [jeu.date, j]]) });
           });
         });
       });
       etats = suivants;
       if (etats.size > FAISCEAU) {
-        const tri = [...etats.entries()].map(x => [x, evalue(x[1].n, x[1].autre)])
-          .sort((a, b) => a[1][1] - b[1][1] || a[1][0] - b[1][0] || a[1][2] - b[1][2]);
+        const tri = [...etats.entries()].map(x => [x, evalue(x[1].n, x[1].autre, x[1].donner)])
+          .sort((a, b) => a[1][1] - b[1][1] || a[1][2] - b[1][2] || a[1][0] - b[1][0] || a[1][3] - b[1][3]);
         etats = new Map(tri.slice(0, FAISCEAU).map(x => x[0]));
       }
     });
     let meilleur = null, cleMeilleur = null;
     etats.forEach(e => {
-      const k = evalue(e.n, e.autre);
+      const k = evalue(e.n, e.autre, e.donner);
       if (!cleMeilleur || lexLess(k, cleMeilleur)) { meilleur = e; cleMeilleur = k; }
     });
     const plan = {};
@@ -379,9 +396,15 @@
           if (indispo[t].has(date)) info.exclus[t] = 'Indisponible';
           else if (blocked[date] && blocked[date].has(t)) info.exclus[t] = blocked[date].get(t);
           else if (info.reportBloc && indispo[t].has(info.reportBloc)) info.exclus[t] = `Indisponible le ${labelFR(info.reportBloc)} (jour de bloc de report)`;
-          else if (absent) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc d'un patient libéral)`;
+          else if (absent && cfg.autonomes.has(t)) info.exclus[t] = `Indisponible le ${labelFR(absent)} (bloc de ses patients libéraux ; autonome, ne peut pas les donner)`;
           else if (cfg.autonomes.has(t) && SLOT_LIBERALE[s.dow] === s.id && cfg.consultAvecDon.has(date)) info.exclus[t] = 'Autonome : ne donne pas ses patients libéraux (des patients de cette consultation sont confiés)';
         });
+        // Patients libéraux à donner selon le MAR (absent un de leurs jours de bloc)
+        info.aDonner = {};
+        if (info.blocs.length) {
+          codes.forEach(t => { const n = patientsADonner(cfg, indispo[t], date, t); if (n) info.aDonner[t] = n; });
+          info.aDonner[AUTRE] = patientsADonner(cfg, null, date, AUTRE);
+        }
         return info;
       });
 
@@ -399,6 +422,7 @@
           ferme: c.ferme,
           exclus: c.exclus,
           blocs: c.blocs,
+          aDonner: c.aDonner,
           force: !!c.force,
           override: week.override,
         };
@@ -495,6 +519,8 @@
     const autre = { 1: 0, 2: 0, 3: 0 };
     const add = {};
     codes.forEach(t => { add[t] = { 1: 0, 2: 0, 3: 0 }; });
+    // Patients libéraux à donner (le moins possible), après les règles du mardi / jeudi-C1
+    const donner = ctx.reduce((a, c, i) => a + (cur[i] && c.aDonner ? (c.aDonner[cur[i]] || 0) : 0), 0);
     ctx.forEach((c, i) => {
       if (!cur[i]) return;
       if (cur[i] === AUTRE) autre[c.slot.prio]++;
@@ -525,7 +551,7 @@
     });
     return [
       horsPlan,
-      autre[1], Math.round(balLib * 1e6) / 1e6, bal(1),
+      autre[1], donner, Math.round(balLib * 1e6) / 1e6, bal(1),
       autre[2] + autre[3],
       depassement,
       autre[2], bal(2), bal(3),
@@ -613,7 +639,7 @@
       const c = w.slots[s.id];
       if (!isTit(c.med)) return;
       (c.blocs || []).forEach(b => {
-        if (indispo[c.med].has(b)) add(`${labelFR(c.date)} ${s.label} : ${c.med} voit des patients libéraux opérés le ${labelFR(b)} mais est indisponible ce jour-là`, c);
+        if (indispo[c.med].has(b)) add(`${labelFR(c.date)} ${s.label} : ${(cfg.libNb[c.date] || {})[b] || ''} patient(s) du ${labelFR(b)} à donner (${c.med} absent ce jour-là)`, { force: true });
         (byDate[b] || []).filter(x => x.med === c.med).forEach(x =>
           add(`${labelFR(b)} : ${c.med} en consultation alors qu'il est au bloc (patient libéral vu le ${labelFR(c.date)})`, c, x));
       });
@@ -698,7 +724,7 @@
       }
       res.operateur = c.med;
       if (!isTit(c.med)) { res.statut = 'alerte'; res.raison = `${c.med || 'personne'} en consultation : vérifier sa présence au bloc le ${labelFR(l.bloc)}`; return res; }
-      if (indispo[c.med].has(l.bloc)) { res.statut = 'alerte'; res.raison = `${c.med} indisponible le ${labelFR(l.bloc)}`; return res; }
+      if (indispo[c.med].has(l.bloc)) { res.statut = 'alerte'; res.aDonner = true; res.raison = `à donner : ${c.med} absent le ${labelFR(l.bloc)}`; return res; }
       const conflit = (cells[l.bloc] || []).find(x => x.med === c.med);
       if (conflit) { res.statut = 'alerte'; res.raison = `${c.med} en consultation (${conflit.slot.label}) le ${labelFR(l.bloc)}`; return res; }
       res.statut = 'ok';
@@ -713,7 +739,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, FERME, SLOTS, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, FERME, SLOTS, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };

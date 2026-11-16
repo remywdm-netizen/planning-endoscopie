@@ -248,7 +248,7 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
+    <p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale ce jour-là (mardi, jeudi-Consult. 1, lundi-Consult. 1 ou mercredi) opère ses patients : il doit être présent chaque jour de bloc et n'a pas de consultation ces jours-là. Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là. Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p>
     <label class="drop admin-only" id="drop">
       <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
       📄 <b>Choisir un fichier Excel</b> ou le glisser ici
@@ -482,8 +482,10 @@ function renderForces(){
     if(mon===E.DEFAULT_CONFIG.start) return; // semaine de référence
     E.SLOTS.forEach(s=>{ if(ov[s.id]) list.push({mon,s,who:ov[s.id]}); });
   });
-  const al=E.alertes(result);
+  const toutes=E.alertes(result);
+  const aDonner=toutes.filter(m=>/ à donner \(/.test(m)), al=toutes.filter(m=>!/ à donner \(/.test(m));
   let h='';
+  if(aDonner.length) h+=`<div class="ok info">🔁 Patients libéraux à donner (le MAR de la consultation est absent ce jour de bloc) — onglet 📥 Consult. libérales → « Donner… » :<br/>${aDonner.map(esc).join('<br/>')}</div>`;
   if(al.length) h+=`<div class="ok info">📌 Forçage(s) en dehors des règles (choix manuel conservé) :<br/>${al.map(esc).join('<br/>')}</div>`;
   const fermes=list.filter(f=>f.who===E.FERME), forces=list.filter(f=>f.who!==E.FERME);
   if(fermes.length) h+=`<div class="ok info">🚫 ${fermes.length} créneau(x) fermé(s) : ${fermes.map(f=>`${f.s.label.toLowerCase()} ${E.labelFR(E.addDays(f.mon,f.s.dow))}`).join(' · ')} — cliquer sur la case puis « Automatique » pour rouvrir.</div>`;
@@ -1276,23 +1278,34 @@ function renderLib(){
     if(st[i].statut==='alerte') l.st=st[i];
   });
   const slotLib=date=>{for(const w of result.weeks)for(const s of E.SLOTS){const c=w.slots[s.id];if(c.date===date&&E.SLOT_LIBERALE[s.dow]===s.id)return c;}return null;};
-  let ok=0,ko=0,off=0,total=0;
+  let ok=0,ko=0,off=0,total=0,aDon=0;
   let h=`<thead><tr><th class="l">Consultation</th><th class="l">Jour de bloc</th><th>Patients</th><th>MAR au bloc</th><th class="l">Contrôle</th><th class="admin-only"></th></tr></thead><tbody>`;
   Object.values(groupes).sort((x,y)=>x.consult.localeCompare(y.consult)).forEach(g=>{
     const x=g.statut, lignes=Object.values(g.lignes).sort((p,q)=>(p.bloc+p.donneA).localeCompare(q.bloc+q.donneA));
     const nbTot=lignes.reduce((a,l)=>a+l.nb,0);
-    // Suggestion : MAR écartés de la consultation uniquement à cause d'un jour de bloc
+    // Proposition : patients à donner selon le MAR (règles du mardi / jeudi-C1 d'abord)
     const c=slotLib(g.consult);
-    const sugg=c?Object.entries(c.exclus||{}).filter(([t,r])=>/bloc d'un patient libéral/.test(r)).map(([t,r])=>`${t} (${r.replace(/ \(bloc d'un patient libéral\)/,'').toLowerCase()})`):[];
+    let propo='';
+    if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force){
+      const cand=codes().map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0}));
+      const possibles=cand.filter(v=>!v.ex).sort((p,q)=>p.n-q.n);
+      const imp=cand.filter(v=>v.ex);
+      propo=`<b>Patients à donner selon le MAR</b> : `+possibles.map(v=>`<span style="${v.t===x.med?'font-weight:700;color:#1a7f37':''}">${v.t===x.med?'✓ ':''}${esc(v.t)} ${v.n}</span>`).join(' · ')
+        +(imp.length?` <span style="color:var(--t3)">· impossible : ${imp.map(v=>esc(v.t)+' ('+esc(v.ex.toLowerCase())+')').join(', ')}</span>`:'');
+      const choisi=possibles.find(v=>v.t===x.med);
+      if(choisi&&possibles.length&&choisi.n>possibles[0].n)
+        propo+=`<div style="color:var(--t3)">${esc(possibles[0].t)} aurait moins de patients à donner, mais le retenir obligerait un « Autre MAR » un autre mardi ou jeudi, ou ferait passer GR sous sa part minimale (règles prioritaires).</div>`;
+    }
     h+=`<tr style="background:var(--bg)"><td class="l" style="white-space:nowrap"><b>${E.labelFR(g.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(g.consult))}</span></td>
       <td class="l" colspan="2" style="font-size:12px">${x.slot?esc(x.slot.label):'—'} · ${nbTot} patient(s)</td>
       <td>${x.med?chip(x.med):'—'}<div style="font-size:10px;color:var(--t3)">en consultation</div></td>
-      <td class="l" colspan="2" style="font-size:11px;color:var(--t2)">${sugg.length?`💡 Pourrait aussi faire cette consultation si ses patients de ce jour-là sont donnés : ${esc(sugg.join(', '))}`:''}</td></tr>`;
+      <td class="l" colspan="2" style="font-size:11px;color:var(--t2)">${propo}</td></tr>`;
     lignes.forEach(l=>{
       const y=l.st, cle=`${g.consult}-${l.bloc}`;
       total+=l.nb;
       let stat;
       if(y.statut==='ok'){stat=`<span class="st-ok">✅ ${esc(y.raison)}</span>`;ok+=l.nb;}
+      else if(y.aDonner){stat=`<span class="st-warn">🔁 ${esc(y.raison)} — cliquer « Donner… »</span>`;aDon+=l.nb;}
       else if(y.statut==='alerte'){stat=`<span class="st-warn">⚠️ ${esc(y.raison)}</span>`;ko+=l.nb;}
       else{stat=`<span class="st-off">${esc(y.raison)}</span>`;off+=l.nb;}
       const op=l.donneA||x.med;
@@ -1324,7 +1337,8 @@ function renderLib(){
   document.getElementById('lib-sum').innerHTML=rows.length?`<div class="stats">
     <div class="stat"><div class="stat-l">Patients</div><div class="stat-v">${total}</div></div>
     <div class="stat" style="border-top:3px solid #1a7f37"><div class="stat-l">MAR présent au bloc</div><div class="stat-v">${ok}</div></div>
-    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, MAR absent, date incohérente</div></div>
+    <div class="stat" style="border-top:3px solid #d4a72c"><div class="stat-l">À donner</div><div class="stat-v">${aDon}</div><div class="stat-s">MAR de la consultation absent ce jour de bloc</div></div>
+    <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, date incohérente…</div></div>
     <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
   </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r admin-only" onclick="libClear()">Effacer tout</button></div>`:'';
 }
