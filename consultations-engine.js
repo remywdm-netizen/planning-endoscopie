@@ -95,6 +95,9 @@
     ajoutsIndispos: {
       2: { AFR: days(11, [3, 9, 16, 18, 20, 23, 27]) },
     },
+    // Journées passées figées : { 'AAAA-MM-JJ|créneau': MAR (ou FERMÉ) } — remplies par le site
+    // quand une journée est passée ; elles ne sont plus jamais recalculées.
+    figes: {},
     // Praticiens forcés, indexés par le lundi de la semaine puis par créneau.
     // Un créneau forcé n'est pas recalculé ; les autres s'adaptent autour.
     // (La semaine du 28/09 est entièrement forcée : semaine de référence.)
@@ -217,6 +220,18 @@
     }
     return best;
   }
+  // Forçages de la semaine + journées passées figées (prioritaires)
+  function forcesSemaine(cfg, monday) {
+    const f = Object.assign({}, cfg.overrides[monday] || {});
+    const figes = cfg.figes || {};
+    SLOTS.forEach(s => {
+      const v = figes[cleLib(addDays(monday, s.dow), s.id)];
+      if (v) f[s.id] = v;
+    });
+    return f;
+  }
+  const estFige = (cfg, date, id) => !!(cfg.figes && cfg.figes[cleLib(date, id)]);
+
   // Patients libéraux d'une consultation que le MAR t devrait donner, car il est
   // absent un de leurs jours de bloc. « Autre MAR » : tous ses patients.
   function patientsADonner(cfg, indispoT, cle, t) {
@@ -240,7 +255,7 @@
     codes.forEach(t => { init[t] = 0; });
     let total = 0;
     for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
-      const forces = cfg.overrides[monday] || {};
+      const forces = forcesSemaine(cfg, monday);
       const sl = ['mar', 'jeu1'].map(id => {
         const s = SLOTS.find(x => x.id === id);
         const date = addDays(monday, s.dow);
@@ -380,7 +395,7 @@
 
     const weeks = [];
     for (let monday = cfg.start; monday <= cfg.end; monday = addDays(monday, 7)) {
-      const forces = cfg.overrides[monday] || {};
+      const forces = forcesSemaine(cfg, monday);
       const week = { monday, slots: {} };
 
       // Contexte de chaque créneau
@@ -428,6 +443,7 @@
           blocs: c.blocs,
           aDonner: c.aDonner,
           force: !!c.force,
+          fige: estFige(cfg, c.date, c.slot.id),
           override: week.override,
         };
         if (!who) return;

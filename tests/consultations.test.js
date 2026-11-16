@@ -474,3 +474,31 @@ test('patients libéraux sur la consultation 2 du lundi', () => {
   const r1 = withLib([{ consult: '2026-11-23', bloc: '2026-11-25', nb: 1 }]);
   assert.equal(E.liberaleStatus(r1)[0].slot.id, 'lun1');
 });
+
+test('journées passées figées : plus jamais recalculées', () => {
+  // Fige les consultations jusqu'au 13/11 telles que calculées aujourd'hui
+  const figes = {};
+  result.weeks.forEach(w => E.SLOTS.forEach(s => {
+    const c = w.slots[s.id];
+    if (c.date < '2026-11-14' && !c.ferie && !c.horsPeriode) figes[c.date + '|' + s.id] = c.ferme ? E.FERME : c.med;
+  }));
+  // Changements après coup : nouvelles indisponibilités, un MAR en plus, des patients libéraux
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.figes = figes;
+  cfg.indispos.SG.push('2026-10-13', '2026-10-15', '2026-11-10');
+  cfg.titulaires.push({ code: 'AB', couleur: '#000', max: 2 });
+  cfg.indispos.AB = [];
+  cfg.liberales = [{ consult: '2026-10-20', bloc: '2026-10-26', nb: 2 }];
+  const r = E.generate(cfg);
+  r.weeks.forEach((w, i) => E.SLOTS.forEach(s => {
+    const c = w.slots[s.id];
+    if (c.date < '2026-11-14') {
+      assert.equal(c.med, result.weeks[i].slots[s.id].med, `${c.date} ${s.id} inchangé`);
+      if (!c.ferie && !c.horsPeriode) assert.ok(c.fige, `${c.date} ${s.id} figé`);
+    }
+  }));
+  // Les journées passées ne comptent pas comme erreurs même si elles ne respectent plus les nouvelles règles
+  assert.deepEqual(E.verify(r), []);
+  // Après le 14/11, le calcul tient compte des changements (AB intégré)
+  assert.ok(r.weeks.some(w => w.monday >= '2026-11-16' && E.SLOTS.some(s => w.slots[s.id].med === 'AB')));
+});
