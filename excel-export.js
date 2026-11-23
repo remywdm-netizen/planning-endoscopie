@@ -177,7 +177,44 @@
 
   // Génère le classeur : une feuille par semaine (nommée par son n° ISO).
   // ExcelJS : la classe ExcelJS ; modele : ArrayBuffer/Buffer du fichier modèle.
-  async function generer(ExcelJS, modele, result, mondays, nomFeuille) {
+  // Feuille « Patients libéraux » : décompte par praticien (dernier onglet du fichier)
+  function feuilleLiberaux(wb, dl, autonomes, codes) {
+    const ws = wb.addWorksheet('Patients libéraux');
+    ws.columns = [{ width: 16 }, { width: 22 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }];
+    ws.getCell('A1').value = 'Patients libéraux — décompte par praticien (T4 2026)';
+    ws.getCell('A1').font = { bold: true, size: 13 };
+    const entete = ['Praticien', 'Vus en consultation', 'Opérés au bloc', 'Donnés', 'Reçus', 'À donner'];
+    const r0 = 3;
+    ws.getRow(r0).values = entete;
+    ws.getRow(r0).font = { bold: true };
+    ws.getRow(r0).eachCell(c => {
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAEEF2' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    const ms = codes.concat(Object.keys(dl).filter(m => !codes.includes(m)));
+    const cles = ['consult', 'bloc', 'donnes', 'recus', 'aDonner'];
+    let r = r0;
+    ms.forEach(m => {
+      const l = dl[m] || {};
+      r++;
+      ws.getRow(r).values = [m + ((autonomes || []).includes(m) ? ' (autonome)' : '')].concat(cles.map(k => l[k] || 0));
+    });
+    r++;
+    ws.getRow(r).values = ['Total'].concat(cles.map(k => ms.reduce((a, m) => a + ((dl[m] || {})[k] || 0), 0)));
+    ws.getRow(r).font = { bold: true };
+    for (let i = r0; i <= r; i++) {
+      ws.getRow(i).eachCell({ includeEmpty: true }, (c, n) => {
+        if (n > 6) return;
+        c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        if (n > 1 && i > r0) c.alignment = { horizontal: 'center' };
+      });
+    }
+    ws.getCell(r + 2, 1).value = '« Opérés au bloc » : patients assurés par le praticien (reçus compris). « À donner » : MAR absent le jour du bloc, patients pas encore confiés.';
+    ws.getCell(r + 2, 1).font = { italic: true, size: 9, color: { argb: 'FF57606A' } };
+    return ws;
+  }
+
+  async function generer(ExcelJS, modele, result, mondays, nomFeuille, options) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(modele);
     const src = (nomFeuille && wb.getWorksheet(nomFeuille)) || wb.worksheets[wb.worksheets.length - 1];
@@ -195,6 +232,7 @@
     });
     anciennes.forEach(ws => wb.removeWorksheet(ws.id));
     semaines.forEach(w => { const ws = wb.getWorksheet(`S${semaineISO(w.monday)}`); if (ws) ws.name = String(semaineISO(w.monday)); });
+    if (options && options.decompteLiberaux) feuilleLiberaux(wb, options.decompteLiberaux, options.autonomes, result.config.codes);
     wb.calcProperties = Object.assign({}, wb.calcProperties, { fullCalcOnLoad: true });
     const buffer = await wb.xlsx.writeBuffer();
     return { buffer, resume, feuilleModele: src.name };
