@@ -1367,7 +1367,7 @@ function renderLib(){
     let propo='';
     // Pas de récapitulatif quand le MAR en consultation est autonome (GR : assure seul ses patients)
     if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force&&!estAutonome(x.med)){
-      const cand=codes().map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0}));
+      const cand=codes().filter(t=>!estAutonome(t)).map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0})); // GR (autonome) non listé
       const possibles=cand.filter(v=>!v.ex).sort((p,q)=>p.n-q.n);
       const imp=cand.filter(v=>v.ex);
       propo=`<b>Patients à donner selon le MAR</b> : `+possibles.map(v=>`<span style="${v.t===x.med?'font-weight:700;color:#1a7f37':''}">${v.t===x.med?'✓ ':''}${esc(v.t)} ${v.n}</span>`).join(' · ')
@@ -1398,7 +1398,7 @@ function renderLib(){
         <td style="white-space:nowrap">${actions}<button class="del" title="Supprimer" onclick="libDelGroupe('${g.cle}','${l.bloc}','${esc(l.donneA)}')">×</button></td></tr>`;
       if(!l.donneA&&y.statut!=='hors'&&!estAutonome(x.med)){
         // MAR présents le jour de la consultation ET le jour du bloc
-        const opts=codes().map(t=>{
+        const opts=codes().filter(t=>!estAutonome(t)).map(t=>{ // GR (autonome) ne reçoit pas : non proposé
           const ic=(cfg.indispos[t]||[]).includes(g.consult), ib=(cfg.indispos[t]||[]).includes(l.bloc);
           const raison=estAutonome(t)?'autonome, ne reçoit pas de patients'
             :ic&&ib?'indisponible le '+E.labelFR(g.consult)+' (consultation) et le '+E.labelFR(l.bloc)+' (bloc)'
