@@ -243,12 +243,7 @@ td.l{text-align:left}
 
   <!-- ── CONSULTATIONS LIBÉRALES ── -->
   <div class="view" id="view-lib">
-    <details class="aide"><summary>❓ Aide</summary><p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> (ou charger un fichier Excel : une ligne par patient avec la <b>date de consultation</b> et la <b>date de bloc opératoire</b>). Le MAR qui assure la consultation libérale choisie (mardi, mercredi, lundi-Consult. 1 ou 2, jeudi-Consult. 1 ou 2) opère ses patients : il doit être présent chaque jour de bloc (le bloc a lieu le matin : il peut consulter l'après-midi du même jour). Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là (le matin). Les autres colonnes (examen, salle…) sont conservées pour information, sauf l'identité patient (nom, date de naissance, IPP…) qui n'est jamais enregistrée. Seule la 1<sup>re</sup> feuille est lue (.xlsx, .xls, .ods ou .csv).</p></details>
-    <label class="drop" id="drop">
-      <input type="file" id="lib-file" accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="libFile(this.files[0]);this.value=''"/>
-      📄 <b>Choisir un fichier Excel</b> ou le glisser ici
-      <div id="lib-src" style="margin-top:6px;font-size:12px"></div>
-    </label>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Pour chaque consultation libérale, indiquer le <b>nombre de patients par jour de bloc</b> avec les menus « Ajouter des patients ». Le MAR qui assure la consultation libérale choisie (mardi, mercredi, lundi-Consult. 1 ou 2, jeudi-Consult. 1 ou 2) opère ses patients : il doit être présent chaque jour de bloc (le bloc a lieu le matin : il peut consulter l'après-midi du même jour). Les règles du mardi et du jeudi restent prioritaires ; parmi les MAR possibles, le planning retient celui qui a <b>le moins de patients à donner</b>. S'il ne peut pas tous les assurer, <b>« Donner »</b> confie une partie des patients d'un jour de bloc à un autre MAR, qui devra lui aussi être présent le jour de la consultation et au bloc ce jour-là (le matin). Aucune identité patient n'est enregistrée.</p></details>
     <div class="card">
       <b>Ajouter des patients</b>
       <div class="row">
@@ -1350,7 +1345,7 @@ function renderLib(){
   let nVisTot=0;
   libMenus();
   try{if(!cfg.libSource)cfg.libSource=localStorage.getItem(STORE_KEY+'_libsrc')||'';}catch(e){}
-  document.getElementById('lib-src').textContent=cfg.libSource||'';
+  const src=document.getElementById('lib-src'); if(src) src.textContent=cfg.libSource||'';
   const rows=cfg.liberales||[];
   const st=E.liberaleStatus(result);
   // Regroupement : consultation → (jour de bloc, MAR confié) → nombre de patients
@@ -1445,12 +1440,6 @@ function renderLib(){
     <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
   </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r" onclick="libClear()">Effacer tout</button></div>`:'';
 }
-(function(){
-  const dz=document.getElementById('drop');
-  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('over');}));
-  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('over');}));
-  dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])libFile(e.dataTransfer.files[0]);});
-})();
 
 // ── Code d'accès ────────────────────────────────────────────
 // Empreinte SHA-256 du code (C2026). Simple barrière d'accès côté navigateur.
