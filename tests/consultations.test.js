@@ -502,3 +502,17 @@ test('journées passées figées : plus jamais recalculées', () => {
   // Après le 14/11, le calcul tient compte des changements (AB intégré)
   assert.ok(r.weeks.some(w => w.monday >= '2026-11-16' && E.SLOTS.some(s => w.slots[s.id].med === 'AB')));
 });
+
+test('patients libéraux sur la consultation 2 du jeudi', () => {
+  // Jeudi 26/11 : 2 patients sur Jeu. C2, opérés le 30/11
+  const r = withLib([{ consult: '2026-11-26', slot: 'jeu2', bloc: '2026-11-30', nb: 2 }]);
+  const w = r.weeks.find(x => x.monday === '2026-11-23');
+  assert.deepEqual(w.slots.jeu2.blocs, ['2026-11-30']);
+  assert.deepEqual(w.slots.jeu1.blocs, [], 'Jeu. C1 non concerné');
+  const st = E.liberaleStatus(r)[0];
+  assert.equal(st.slot.id, 'jeu2');
+  assert.equal(st.med, w.slots.jeu2.med);
+  assert.deepEqual(E.verify(r), []);
+  // Sans créneau précisé, un jeudi reste sur Jeu. C1
+  assert.equal(E.liberaleStatus(withLib([{ consult: '2026-11-26', bloc: '2026-11-30' }]))[0].slot.id, 'jeu1');
+});

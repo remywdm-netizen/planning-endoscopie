@@ -31,7 +31,7 @@
 
   // Créneau de consultation libérale selon le jour (0 = lundi … 3 = jeudi).
   const SLOT_LIBERALE = { 0: 'lun1', 1: 'mar', 2: 'mer', 3: 'jeu1' };   // créneau libéral par défaut
-  const SLOTS_LIBERAUX = ['lun1', 'lun2', 'mar', 'mer', 'jeu1'];       // créneaux pouvant recevoir des libéraux
+  const SLOTS_LIBERAUX = ['lun1', 'lun2', 'mar', 'mer', 'jeu1', 'jeu2'];       // créneaux pouvant recevoir des libéraux
   // Clé d'une consultation libérale : date + créneau (lundi : C1 ou C2)
   const dowDe = iso => (new Date(iso + 'T00:00:00Z').getUTCDay() + 6) % 7;
   const creneauLib = l => (l.slot && SLOTS_LIBERAUX.includes(l.slot) ? l.slot : SLOT_LIBERALE[dowDe(l.consult)]);
