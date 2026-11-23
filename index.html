@@ -1365,7 +1365,8 @@ function renderLib(){
     // Proposition : patients à donner selon le MAR (règles du mardi / jeudi-C1 d'abord)
     const c=slotLib(g.consult,g.slot);
     let propo='';
-    if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force){
+    // Pas de récapitulatif quand le MAR en consultation est autonome (GR : assure seul ses patients)
+    if(c&&!c.ferie&&!c.ferme&&!c.horsPeriode&&!c.force&&!estAutonome(x.med)){
       const cand=codes().map(t=>({t,ex:(c.exclus||{})[t],n:(c.aDonner||{})[t]||0}));
       const possibles=cand.filter(v=>!v.ex).sort((p,q)=>p.n-q.n);
       const imp=cand.filter(v=>v.ex);
