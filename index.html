@@ -1207,6 +1207,19 @@ function libDelGroupe(c,b,m){
   if(!confirm(`Supprimer ces patients (consultation ${E.labelFR(c.split('|')[0])}, bloc ${E.labelFR(b)}) ?`)) return;
   cfg.liberales=cfg.liberales.filter(l=>!memeGroupe(l,c,b,m));changed();
 }
+// Indisponibilités du MAR choisi dans « Donner à », de la consultation à une semaine après le bloc
+function libTexteIndispo(m,consult,bloc){
+  if(!m) return '';
+  const fin=E.addDays(bloc,7);
+  const dates=(cfg.indispos[m]||[]).filter(d=>d>=consult&&d<=fin).sort();
+  return dates.length
+    ?`<span style="color:var(--t2)">Indisponibilités de <b>${esc(m)}</b> du ${E.labelFR(consult)} au ${E.labelFR(fin)} : ${dates.map(d=>`<span class="tag" style="background:var(--red-bg);color:var(--red)">${esc(libelleJour(d))}</span>`).join(' ')}</span>`
+    :`<span style="color:#1a7f37">Aucune indisponibilité de <b>${esc(m)}</b> du ${E.labelFR(consult)} au ${E.labelFR(fin)}.</span>`;
+}
+function libIndispoDon(cle,consult,bloc){
+  const m=document.getElementById('don-m-'+cle).value, el=document.getElementById('don-ind-'+cle);
+  if(el) el.innerHTML=libTexteIndispo(m,consult,bloc);
+}
 function libOuvrirDon(id){const e=document.getElementById(id);if(e)e.hidden=!e.hidden;}
 function libClear(){
   if(!confirm('Effacer tous les patients libéraux ?')) return;
@@ -1274,15 +1287,20 @@ function renderLib(){
         // MAR présents le jour de la consultation ET le jour du bloc
         const opts=codes().map(t=>{
           const ic=(cfg.indispos[t]||[]).includes(g.consult), ib=(cfg.indispos[t]||[]).includes(l.bloc);
-          const raison=estAutonome(t)?'autonome, ne reçoit pas de patients':ic&&ib?'absent le '+E.labelFR(g.consult)+' et le '+E.labelFR(l.bloc):ic?'absent le jour de la consultation':ib?'absent le jour du bloc':'';
-          return `<option value="${esc(t)}"${raison?' disabled':''}>${esc(t)}${raison?' ('+raison+')':''}</option>`;
+          const raison=estAutonome(t)?'autonome, ne reçoit pas de patients'
+            :ic&&ib?'indisponible le '+E.labelFR(g.consult)+' (consultation) et le '+E.labelFR(l.bloc)+' (bloc)'
+            :ic?'indisponible le '+E.labelFR(g.consult)+' (jour de la consultation)'
+            :ib?'indisponible le '+E.labelFR(l.bloc)+' (jour du bloc)':'';
+          const ok='présent le '+E.labelFR(g.consult)+(g.consult!==l.bloc?' et le '+E.labelFR(l.bloc):'');
+          return `<option value="${esc(t)}"${raison?' disabled':''}>${raison?'✗':'✓'} ${esc(t)} — ${raison||ok}</option>`;
         }).join('');
         const premierDispo=codes().find(t=>!estAutonome(t)&&!(cfg.indispos[t]||[]).includes(g.consult)&&!(cfg.indispos[t]||[]).includes(l.bloc));
         h+=`<tr id="don-${cle}" hidden><td></td><td colspan="5" class="l"><div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
           Donner <select id="don-n-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${Array.from({length:l.nb},(_,i)=>`<option${i+1===l.nb?' selected':''}>${i+1}</option>`).join('')}</select> patient(s) sur ${l.nb}
-          à <select id="don-m-${cle}" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${premierDispo?'':'<option value="">— aucun MAR disponible —</option>'}${opts.replace(`value="${premierDispo}"`,`value="${premierDispo}" selected`)}</select>
+          à <select id="don-m-${cle}" onchange="libIndispoDon('${cle}','${g.consult}','${l.bloc}')" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r)">${premierDispo?'':'<option value="">— aucun MAR disponible —</option>'}${opts.replace(`value="${premierDispo}"`,`value="${premierDispo}" selected`)}</select>
           <button class="btn btn-g" style="padding:3px 10px" onclick="libDonner('${g.cle}','${l.bloc}')"${premierDispo?'':' disabled'}>Confirmer</button>
-          <span style="color:var(--t3)">Le MAR choisi doit être présent le ${E.labelFR(g.consult)} (consultation) et le ${E.labelFR(l.bloc)} (bloc le matin ; consultation possible l'après-midi).</span></div></td></tr>`;
+          <span style="color:var(--t3)">Le MAR choisi doit être présent le ${E.labelFR(g.consult)} (consultation) et le ${E.labelFR(l.bloc)} (bloc le matin ; consultation possible l'après-midi).</span></div>
+          <div id="don-ind-${cle}" style="font-size:12px;margin-top:6px">${libTexteIndispo(premierDispo,g.consult,l.bloc)}</div></td></tr>`;
       }
     });
   });
