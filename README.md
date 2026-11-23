@@ -35,6 +35,8 @@ Pour les autres postes : **🔗 Copier le lien de connexion** et l'envoyer à l'
 
 Chaque modification est envoyée au Sheet ; chaque poste relit le Sheet à l'ouverture (la modification la plus récente l'emporte). Aucune identité patient n'est envoyée.
 
+**Protections contre la perte de données** : un poste n'envoie rien tant qu'il n'a pas relu le Sheet ; un envoi qui effacerait beaucoup de données (réglages vides ou revenus à l'origine) est bloqué par le site et par le script, et demande confirmation ; le script garde des sauvegardes datées (feuille masquée `_sauvegardes`, 60 dernières) et le navigateur ses 10 dernières versions, restaurables avec **🕘 Versions précédentes**.
+
 Sans Google Sheet, les modifications sont enregistrées dans le navigateur (localStorage). Pour les partager : **Exporter la configuration (JSON)** puis **Importer** sur l'autre poste. Les valeurs d'origine sont dans `DEFAULT_CONFIG` (`consultations-engine.js`).
 
 **Journées passées** : figées automatiquement (🔒) dès qu'elles sont passées ; les modifications ultérieures ne changent que les jours à venir. Cliquer sur une case passée permet de la **corriger à la main** (MAR, Autre MAR, praticien externe ou pas de consultation).
