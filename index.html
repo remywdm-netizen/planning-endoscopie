@@ -214,8 +214,13 @@ td.l{text-align:left}
     </div>
     <div class="tbl-wrap"><table id="plan"></table></div>
 
-    <details class="pli"><summary>Total des consultations par praticien</summary>
-      <div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div>
+    <details class="pli" open><summary>📊 Décomptes par praticien</summary>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="btn btn-g" id="dec-b-consult" onclick="decOnglet('consult')">Consultations</button>
+        <button class="btn" id="dec-b-lib" onclick="decOnglet('lib')">Patients libéraux</button>
+      </div>
+      <div id="dec-consult"><div class="tbl-wrap"><table id="totaux" style="min-width:500px"></table></div></div>
+      <div id="dec-lib" hidden></div>
     </details>
     <details class="pli"><summary>❓ Règles appliquées</summary>
       <div class="rules" id="rules"></div>
@@ -307,7 +312,7 @@ td.l{text-align:left}
     </div>
 
     <h2>📊 Planning Excel</h2>
-    <details class="aide"><summary>❓ Aide</summary><p class="hint">Génère le planning hebdomadaire du service au format de votre modèle Excel, une feuille par semaine, avec la partie endoscopie remplie depuis ce site. Sont remplis : la ligne <b>Consultations d'anesthésie → ENDOSCOPIES</b> (l'après-midi), la ligne <b>ENDOSCOPIES</b> du bloc le matin (MAR au bloc par report : praticien du mardi le lundi suivant, du jeudi-C1 le mardi suivant, et patients libéraux), les <b>ABSENTS</b> (indisponibilités des MAR), les dates, le n° de semaine et les jours fériés. Les autres lignes (viscéral, ortho, gardes…) sont laissées vides ; la mise en forme, les formules et l'annuaire du modèle sont conservés.</p></details>
+    <details class="aide"><summary>❓ Aide</summary><p class="hint">Génère le planning hebdomadaire du service au format de votre modèle Excel, une feuille par semaine, avec la partie endoscopie remplie depuis ce site. Sont remplis : la ligne <b>Consultations d'anesthésie → ENDOSCOPIES</b> (l'après-midi), la ligne <b>ENDOSCOPIES</b> du bloc le matin (MAR au bloc par report : praticien du mardi le lundi suivant, du jeudi-C1 le mardi suivant, et patients libéraux), les <b>ABSENTS</b> (indisponibilités des MAR), les dates, le n° de semaine et les jours fériés. Les autres lignes (viscéral, ortho, gardes…) sont laissées vides ; la mise en forme, les formules et l'annuaire du modèle sont conservés. Une dernière feuille <b>« Patients libéraux »</b> donne le décompte des patients libéraux par praticien.</p></details>
     <label class="drop" id="xls-drop">
       <input type="file" id="xls-file" accept=".xlsx,.xlsm" style="display:none" onchange="xlsModele(this.files[0]);this.value=''"/>
       📄 <b>Choisir le modèle Excel</b> (ex. « Planning semaine 41.xlsx ») ou le glisser ici
@@ -619,6 +624,21 @@ function renderTotaux(){
     h+=`<tr><td style="text-align:left">${chip(k)}</td><td><b>${d[k]||0}</b></td><td>${t[2]}</td><td>${t[3]}</td><td><b>${t.total}</b></td></tr>`;
   });
   document.getElementById('totaux').innerHTML=h+'</tbody>';
+  renderDecLib();
+}
+
+// Onglets du décompte en bas du planning
+const DEC_KEY=STORE_KEY+'_dec';
+function decOnglet(o){
+  try{localStorage.setItem(DEC_KEY,o);}catch(e){}
+  ['consult','lib'].forEach(k=>{
+    document.getElementById('dec-'+k).hidden=k!==o;
+    document.getElementById('dec-b-'+k).className='btn'+(k===o?' btn-g':'');
+  });
+}
+function renderDecLib(){
+  const el=document.getElementById('dec-lib'); if(!el) return;
+  el.innerHTML=(cfg.liberales||[]).length?libTableDecompte(true):'<p class="hint">Aucun patient libéral (onglet 📥 Consult. libérales).</p>';
 }
 
 function renderRules(){
@@ -911,7 +931,7 @@ async function xlsGenerer(){
   const btn=document.getElementById('xls-go');btn.disabled=true;btn.textContent='⏳ Génération…';
   try{
     const ExcelJS=await chargerExcelJS();
-    const {buffer,resume}=await ExcelExport.generer(ExcelJS,xlsModeleData.slice(0),result,mondays);
+    const {buffer,resume}=await ExcelExport.generer(ExcelJS,xlsModeleData.slice(0),result,mondays,null,{decompteLiberaux:E.decompteLiberaux(result),autonomes:cfg.titulaires.filter(t=>t.autonome).map(t=>t.code)});
     const n=resume.map(r=>r.semaine);
     const nom=n.length===1?`Planning semaine ${n[0]}.xlsx`:`Planning semaines ${n[0]}-${n[n.length-1]}.xlsx`;
     const a=document.createElement('a');
@@ -1341,12 +1361,12 @@ const LIB_FILTRE_KEY=STORE_KEY+'_libfiltre';
 function libFiltreActif(){try{return localStorage.getItem(LIB_FILTRE_KEY)==='1';}catch(e){return false;}}
 function libFiltre(on){try{localStorage.setItem(LIB_FILTRE_KEY,on?'1':'0');}catch(e){}renderLib();}
 // Décompte des patients libéraux par praticien
-function libTableDecompte(){
+function libTableDecompte(nu){
   const d=E.decompteLiberaux(result);
   const ms=[...codes(),...Object.keys(d).filter(m=>!codes().includes(m))].filter(m=>d[m]);
   const tot=k=>ms.reduce((a,m)=>a+d[m][k],0);
   const cell=(v,coul)=>`<td>${v?`<b${coul?` style="color:${coul}"`:''}>${v}</b>`:'<span style="color:var(--t3)">0</span>'}</td>`;
-  return `<div class="card" style="padding:10px 12px"><b>Décompte par praticien</b> <span style="color:var(--t3);font-size:12px">(patients libéraux du trimestre)</span>
+  return `<div${nu?'':' class="card" style="padding:10px 12px"'}>${nu?'':'<b>Décompte par praticien</b> '}<span style="color:var(--t3);font-size:12px">(patients libéraux du trimestre)</span>
     <div class="tbl-wrap" style="margin-top:6px"><table style="min-width:520px"><thead><tr><th class="l">MAR</th><th>Vus en consultation</th><th>Opérés au bloc</th><th>Donnés</th><th>Reçus</th><th>À donner</th></tr></thead><tbody>
     ${ms.map(m=>`<tr><td class="l">${chip(m)}${estAutonome(m)?' <span style="font-size:11px;color:var(--t3)">autonome</span>':''}</td>${cell(d[m].consult)}${cell(d[m].bloc)}${cell(d[m].donnes)}${cell(d[m].recus)}${cell(d[m].aDonner,'#9a6700')}</tr>`).join('')}
     <tr style="background:var(--bg)"><td class="l"><b>Total</b></td>${cell(tot('consult'))}${cell(tot('bloc'))}${cell(tot('donnes'))}${cell(tot('recus'))}${cell(tot('aDonner'),'#9a6700')}</tr>
@@ -1510,6 +1530,7 @@ const viaLien=gsLireLien();
 renderGs();
 if(gsActif()) gsCharger(false,viaLien).then(()=>{ if(viaLien&&gsEtat.ok) toast('✅ Poste connecté au Google Sheet'); if(gsEtat.ok) figerPasse(); });
 else figerPasse();
+try{const o=localStorage.getItem(DEC_KEY);if(o==='lib')decOnglet('lib');}catch(e){}
 try{const t=localStorage.getItem(STORE_KEY+'_tab');if(t&&document.getElementById('tab-'+t))showTab(t);}catch(e){}
 </script>
 </body>
