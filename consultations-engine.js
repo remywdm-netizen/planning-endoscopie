@@ -733,6 +733,24 @@
     });
   }
 
+  // Décompte des patients libéraux par praticien :
+  // vus en consultation, opérés au bloc (après dons), donnés, reçus, encore à donner.
+  function decompteLiberaux(result) {
+    const st = liberaleStatus(result);
+    const res = {};
+    const ligne = m => (res[m] = res[m] || { consult: 0, bloc: 0, donnes: 0, recus: 0, aDonner: 0 });
+    result.config.codes.forEach(ligne);
+    st.forEach(x => {
+      if (x.statut === 'hors' || !x.med) return;
+      const n = x.nb || 1;
+      ligne(x.med).consult += n;
+      if (x.aDonner) ligne(x.med).aDonner += n;
+      if (x.operateur && !x.aDonner) ligne(x.operateur).bloc += n; // « à donner » : pas encore assuré au bloc
+      if (x.donneA) { ligne(x.med).donnes += n; ligne(x.donneA).recus += n; }
+    });
+    return res;
+  }
+
   // Règles non respectées par le calcul automatique (doit être vide).
   function verify(result) { return check(result).filter(i => !i.force).map(i => i.msg); }
   // Écarts aux règles causés par un praticien forcé manuellement.
@@ -740,7 +758,7 @@
 
   const api = {
     TITULAIRES, AUTRE, FERME, SLOTS, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, SLOTS_LIBERAUX, creneauLib, REPORT_BLOC, DEFAULT_CONFIG,
-    generate, verify, alertes, liberaleStatus, decompte, totaux, addDays, labelFR, renameTitulaire,
+    generate, verify, alertes, liberaleStatus, decompteLiberaux, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
