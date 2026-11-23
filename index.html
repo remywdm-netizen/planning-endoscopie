@@ -272,13 +272,14 @@ td.l{text-align:left}
       <button class="btn btn-g" onclick="saveMars()">💾 Enregistrer les MAR</button>
       <button class="btn" onclick="exportConfig()">⬇ Exporter la configuration (JSON)</button>
       <label class="btn">⬆ Importer<input type="file" accept="application/json" style="display:none" onchange="importConfig(this)"/></label>
+      <button class="btn" onclick="ouvrirVersions()">🕘 Versions précédentes</button>
       <button class="btn btn-r" onclick="resetConfig()">↺ Revenir aux valeurs d'origine</button>
     </div>
     <div class="ok info" style="margin-top:14px" id="gs-local">Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).</div>
 
     <h2>☁️ Google Sheet</h2>
     <div class="card">
-      <details class="aide"><summary>❓ Aide</summary><p class="hint" style="margin-bottom:8px">Le Google Sheet conserve les réglages (MAR, indisponibilités, créneaux fermés ou forcés, patients libéraux) et affiche le planning et le décompte. Toute la saisie se fait sur le site : chaque modification est envoyée au Sheet, et chaque poste relit le Sheet à l'ouverture.</p></details>
+      <details class="aide"><summary>❓ Aide</summary><p class="hint" style="margin-bottom:8px">Le Google Sheet conserve les réglages (MAR, indisponibilités, créneaux fermés ou forcés, patients libéraux) et affiche le planning et le décompte. Toute la saisie se fait sur le site : chaque modification est envoyée au Sheet, et chaque poste relit le Sheet à l'ouverture.</p><p class="hint" style="margin-bottom:8px"><b>Protections :</b> un poste n'envoie rien tant qu'il n'a pas relu le Sheet ; un envoi qui effacerait beaucoup de données (réglages vides ou revenus à l'origine) est bloqué et demande confirmation ; le Sheet et ce navigateur gardent des versions datées, restaurables avec <b>🕘 Versions précédentes</b>.</p></details>
       <div id="gs-etat" style="margin-bottom:10px"></div>
       <div class="row">
         <input type="url" id="gs-url" placeholder="Adresse de l'application Web (https://script.google.com/macros/s/…/exec)" style="flex:1;min-width:220px"/>
@@ -289,6 +290,7 @@ td.l{text-align:left}
         <button class="btn" onclick="gsEnvoyer(true)">⬆ Envoyer maintenant</button>
         <button class="btn" onclick="gsCharger(true)">⬇ Recharger depuis le Sheet</button>
         <button class="btn" onclick="gsCopierLien()">🔗 Copier le lien de connexion</button>
+        <button class="btn" onclick="ouvrirVersions()">🕘 Versions précédentes</button>
         <button class="btn btn-r" onclick="gsDeconnecter()">Déconnecter</button>
         <button class="btn" onclick="document.getElementById('gs-aide').hidden=!document.getElementById('gs-aide').hidden">❓ Mise en place</button>
       </div>
@@ -404,6 +406,32 @@ function persisted(){
 function saveConfig(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); }
   catch(e){ toast('⚠️ Enregistrement impossible dans ce navigateur'); }
+  versionLocale('Enregistrement automatique',false);
+}
+// ── Protections contre la perte de données ───────────────────
+// Quantité de données saisies : sert à repérer un écrasement par des réglages vides / d'origine
+function compter(r){
+  r=r||{};
+  const ov=Object.values(r.overrides||{}).reduce((n,o)=>n+Object.keys(o||{}).length,0);
+  const ind=Object.values(r.indispos||{}).reduce((n,l)=>n+(Array.isArray(l)?l.length:0),0);
+  return {lib:(r.liberales||[]).length,ov,ind,mar:(r.titulaires||[]).length};
+}
+function plusPauvre(a,b){ // b contient-il nettement moins de données que a ?
+  const sa=a.lib+a.ov+a.ind, sb=b.lib+b.ov+b.ind;
+  return (a.lib>=3&&b.lib<a.lib/2)||(a.ov>=3&&b.ov<a.ov/2)||(sa>=10&&sb<sa*0.6);
+}
+function resumeDonnees(c){return `${c.mar} MAR · ${c.ind} indispo. · ${c.ov} forçages · ${c.lib} libéraux`;}
+// Versions précédentes gardées dans ce navigateur (en plus des sauvegardes du Google Sheet)
+const VERS_KEY=STORE_KEY+'_versions', VERS_MAX=10, VERS_ECART=30*60*1000;
+function versionsLocales(){try{return JSON.parse(localStorage.getItem(VERS_KEY)||'[]');}catch(e){return [];}}
+function versionLocale(source,force,donnees){
+  try{
+    const d=donnees||persisted(), texte=JSON.stringify(d), v=versionsLocales();
+    if(v.length&&v[0].texte===texte) return;
+    if(!force&&v.length&&Date.now()-v[0].quand<VERS_ECART) return;
+    v.unshift({quand:Date.now(),source,resume:resumeDonnees(compter(d)),texte});
+    localStorage.setItem(VERS_KEY,JSON.stringify(v.slice(0,VERS_MAX)));
+  }catch(e){}
 }
 
 // ── Utilitaires ──────────────────────────────────────────────
@@ -788,6 +816,7 @@ function importConfig(input){
     try{
       const c=JSON.parse(rd.result);
       if(!validConfig(c)) throw new Error('format');
+      versionLocale('Avant import d\'un fichier',true);
       cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},c));
       changed();toast('✅ Configuration importée');
     }catch(e){toast('⚠️ Fichier invalide');}
@@ -797,6 +826,7 @@ function importConfig(input){
 }
 function resetConfig(){
   if(!confirm('Revenir aux MAR et indisponibilités d\'origine ? Les modifications seront perdues.')) return;
+  versionLocale('Avant retour aux valeurs d\'origine',true);
   const lib={liberales:cfg.liberales,figes:cfg.figes}; // journées passées : toujours conservées
   cfg=Object.assign(clone(E.DEFAULT_CONFIG),lib); // consultations libérales conservées
   changed();toast('Configuration d\'origine restaurée');
@@ -922,6 +952,9 @@ function rafraichir(){
 // et affiche le planning ; la saisie se fait uniquement sur le site.
 const GS_KEY=STORE_KEY+'_gsheet';
 let gs={url:'',code:''}, gsEtat={msg:'',ok:null,quand:null}, gsTimer=null, gsEnCours=false;
+// gsLu : le Sheet a été relu depuis l'ouverture de la page (sinon aucun envoi automatique) ;
+// gsConnu : quantité de données du Sheet à la dernière lecture / au dernier envoi ; gsVersion : version du script
+let gsLu=false, gsConnu=null, gsVersion=0;
 try{gs=Object.assign(gs,JSON.parse(localStorage.getItem(GS_KEY)||'{}'));}catch(e){}
 function gsSauver(){try{localStorage.setItem(GS_KEY,JSON.stringify(gs));}catch(e){}}
 function gsActif(){return !!(gs.url&&gs.code);}
@@ -935,6 +968,7 @@ function renderGs(){
   const h=gsEtat.quand?gsEtat.quand.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'';
   const coul=gsEtat.ok===false?'var(--red)':gsEtat.ok?'#1a7f37':'var(--t2)';
   el.innerHTML=`<span style="color:${coul};font-weight:600">${gsEtat.ok===false?'⚠️':'☁️'} ${esc(gsEtat.msg||'Connecté')}</span>${h?` <span style="color:var(--t3)">(${h})</span>`:''}`;
+  if(gsLu&&gsVersion<2) el.innerHTML+=`<div style="color:#9a6700;font-size:12px;margin-top:4px">⚠️ Script du Google Sheet à mettre à jour (protections et sauvegardes) : ❓ Mise en place → 📋 Copier le script, le coller dans Apps Script, puis Déployer → Gérer les déploiements → ✏️ → Nouvelle version.</div>`;
   document.getElementById('gs-local').textContent='Les réglages sont synchronisés avec le Google Sheet : ils sont partagés par tous les postes connectés.';
 }
 function gsTableaux(){
@@ -952,19 +986,21 @@ function gsTableaux(){
   decompte.push(['Mis à jour le',new Date().toLocaleString('fr-FR'),'','']);
   return {planning,decompte};
 }
-async function gsAppel(corps){
+async function gsAppel(corps,params){
   let r;
+  const extra=Object.entries(params||{}).map(([k,v])=>'&'+k+'='+encodeURIComponent(v)).join('');
   try{
     r=corps
       ?await fetch(gs.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(corps)})
-      :await fetch(gs.url+(gs.url.includes('?')?'&':'?')+'code='+encodeURIComponent(gs.code)+'&_='+Date.now());
+      :await fetch(gs.url+(gs.url.includes('?')?'&':'?')+'code='+encodeURIComponent(gs.code)+extra+'&_='+Date.now());
   }catch(e){
     // Le script n'a pas répondu en JSON : réglage du déploiement Google le plus souvent
     throw new Error('le script Google ne répond pas. Vérifier : adresse terminée par /exec ; déploiement « Application Web » avec accès « Tout le monde » (pas « Toute personne disposant d\'un compte Google ») ; accès autorisé au déploiement. Test : ouvrir l\'adresse /exec dans un onglet, elle doit afficher un texte commençant par {"ok"');
   }
   if(!r.ok) throw new Error('Google Sheet injoignable ('+r.status+')');
   const j=await r.json();
-  if(!j.ok) throw new Error(j.erreur||'Réponse invalide');
+  if(j.version) gsVersion=j.version;
+  if(!j.ok){const e=new Error(j.erreur||'Réponse invalide');e.reponse=j;throw e;}
   return j;
 }
 function gsPlanifierEnvoi(){
@@ -973,16 +1009,42 @@ function gsPlanifierEnvoi(){
   gsStatut('Modification en attente d\'envoi…',null);
   gsTimer=setTimeout(()=>gsEnvoyer(false),1500);
 }
-async function gsEnvoyer(manuel){
+// Demande avant d'écraser un Sheet qui contient nettement plus de données que ce poste.
+function confirmerEcrasement(sheet,poste){
+  return confirm('⚠️ Attention : le Google Sheet contient beaucoup plus de données que ce poste.\n\n'
+    +'Google Sheet : '+resumeDonnees(sheet)+'\nCe poste : '+resumeDonnees(poste)+'\n\n'
+    +'OK = remplacer le Google Sheet par la version de ce poste (une sauvegarde est gardée).\n'
+    +'Annuler = reprendre la version du Google Sheet sur ce poste (conseillé).');
+}
+async function gsEnvoyer(manuel,forcer){
   if(!gsActif()){toast('Connecter d\'abord le Google Sheet');return;}
   clearTimeout(gsTimer);
+  // Jamais d'envoi automatique tant que le Sheet n'a pas été relu : on écraserait peut-être une version plus récente
+  if(!gsLu&&!forcer){
+    if(!manuel){gsStatut('Envoi suspendu : le Google Sheet n\'a pas pu être relu. Vos modifications sont gardées sur ce poste ; cliquer « ⬇ Recharger depuis le Sheet » ou « ⬆ Envoyer maintenant ».',false);return;}
+    if(!confirm('Le Google Sheet n\'a pas été relu depuis l\'ouverture de la page. Envoyer quand même la version de ce poste ?')) return;
+  }
+  const reglages=persisted(), n=compter(reglages);
+  if(!forcer&&gsConnu&&plusPauvre(gsConnu,n)){
+    if(confirmerEcrasement(gsConnu,n)) return gsEnvoyer(manuel,true);
+    return gsCharger(true);
+  }
   try{
     gsEnCours=true;
     const t=gsTableaux();
-    await gsAppel({code:gs.code,reglages:persisted(),majLe:cfg.majLe||Date.now(),planning:t.planning,decompte:t.decompte});
+    await gsAppel({code:gs.code,reglages,majLe:cfg.majLe||Date.now(),planning:t.planning,decompte:t.decompte,forcer:!!forcer});
+    gsLu=true;gsConnu=n;
     gsStatut('Enregistré dans le Google Sheet',true);
     if(manuel) toast('✅ Envoyé au Google Sheet');
-  }catch(e){gsStatut('Envoi impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);}
+  }catch(e){
+    const j=e.reponse;
+    if(j&&j.protege){ // le script a bloqué l'écrasement
+      gsEnCours=false;
+      if(confirmerEcrasement(j.actuel,j.envoye)) return gsEnvoyer(manuel,true);
+      return gsCharger(true);
+    }
+    gsStatut('Envoi impossible : '+e.message,false);if(manuel)toast('⚠️ '+e.message);
+  }
   finally{gsEnCours=false;}
 }
 // premiere : première connexion de ce poste → le Sheet l'emporte toujours
@@ -994,7 +1056,9 @@ async function gsCharger(manuel,premiere){
     const j=await gsAppel(null);
     // Les anciens liens « consultation » / « indisponibilités » ne sont plus acceptés
     if(j.role&&j.role!=='admin'){gs={url:'',code:''};gsSauver();throw new Error('ce lien (consultation ou indisponibilités) n\'est plus valable : demander le lien de connexion');}
+    gsLu=true;gsConnu=j.reglages?compter(j.reglages):null;
     if(j.reglages&&validConfig(j.reglages)&&(manuel||premiere||(j.majLe||0)>=(cfg.majLe||0))){
+      versionLocale('Avant chargement depuis le Google Sheet',true); // la version de ce poste reste récupérable
       cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},j.reglages));
       cfg.majLe=j.majLe||cfg.majLe;
       saveConfig();rafraichir();
@@ -1009,13 +1073,13 @@ async function gsConnecter(){
   const url=document.getElementById('gs-url').value.trim(), code=document.getElementById('gs-code').value.trim();
   if(!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(url)){toast('Adresse attendue : https://script.google.com/macros/s/…/exec');return;}
   if(!code){toast('Saisir le code secret choisi dans le script');return;}
-  gs={url,code};gsSauver();
+  gs={url,code};gsSauver();gsLu=false;gsConnu=null;
   await gsCharger(false,true);
   if(gsEtat.ok) toast('✅ Google Sheet connecté');
 }
 function gsDeconnecter(){
   if(!confirm('Déconnecter le Google Sheet de ce poste ? Les réglages restent dans ce navigateur et dans le Sheet.')) return;
-  gs={url:'',code:''};gsSauver();clearTimeout(gsTimer);
+  gs={url:'',code:''};gsSauver();clearTimeout(gsTimer);gsLu=false;gsConnu=null;
   document.getElementById('gs-url').value='';document.getElementById('gs-code').value='';
   document.getElementById('gs-local').textContent='Les modifications sont enregistrées dans ce navigateur uniquement. Pour les partager entre postes, connecter un Google Sheet ci-dessous (ou utiliser « Exporter la configuration », puis « Importer »).';
   gsEtat={msg:'',ok:null,quand:null};renderGs();
@@ -1043,6 +1107,54 @@ function gsLireLien(){
   }catch(e){toast('⚠️ Lien de connexion invalide');}
   history.replaceState(null,'',location.href.split('#')[0]); // retire le code secret de la barre d'adresse
   return gsActif();
+}
+// ── Versions précédentes (sauvegardes du Sheet et de ce navigateur) ──
+let versionsSheet=[];
+function dateVersion(t){return new Date(t).toLocaleString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+async function ouvrirVersions(){
+  document.getElementById('modal-title').innerHTML='🕘 Versions précédentes<small>Choisir une version pour la remettre en place</small>';
+  const body=document.getElementById('modal-body');
+  body.innerHTML='<p class="hint">Chargement…</p>';
+  document.getElementById('modal').classList.add('on');
+  let hSheet='';
+  if(gsActif()){
+    try{
+      const j=await gsAppel(null,{action:'sauvegardes'});
+      if(!Array.isArray(j.sauvegardes)) throw Object.assign(new Error('ancien'),{ancien:true});
+      versionsSheet=j.sauvegardes;
+      hSheet=versionsSheet.length
+        ?versionsSheet.map((v,i)=>`<button class="opt" onclick="restaurerSheet(${i})"><span style="flex:1"><b>${esc(dateVersion(v.quand))}</b><br><span style="color:var(--t2);font-size:12px">${esc(v.resume)}</span></span>Restaurer</button>`).join('')
+        :'<p class="hint">Aucune sauvegarde pour l\'instant (une sauvegarde est faite au plus toutes les 20 minutes, quand les réglages changent).</p>';
+    }catch(e){
+      hSheet=e.ancien||gsVersion<2
+        ?'<p class="hint">⚠️ Le script du Google Sheet est une ancienne version, sans sauvegardes : recoller le script (⚙️ Réglages → ☁️ Google Sheet → ❓ Mise en place → 📋 Copier le script), puis <b>Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer</b>.</p>'
+        :`<p class="hint">⚠️ Lecture impossible : ${esc(e.message)}</p>`;
+    }
+    hSheet='<h3 style="margin:8px 0 4px;font-size:14px">☁️ Google Sheet (partagé par tous les postes)</h3>'+hSheet;
+  }
+  const loc=versionsLocales();
+  const hLoc='<h3 style="margin:14px 0 4px;font-size:14px">💻 Ce navigateur</h3>'+(loc.length
+    ?loc.map((v,i)=>`<button class="opt" onclick="restaurerLocale(${i})"><span style="flex:1"><b>${esc(dateVersion(v.quand))}</b> — ${esc(v.source)}<br><span style="color:var(--t2);font-size:12px">${esc(v.resume)}</span></span>Restaurer</button>`).join('')
+    :'<p class="hint">Aucune version gardée dans ce navigateur.</p>');
+  body.innerHTML=`<p class="hint">Actuellement : ${esc(resumeDonnees(compter(persisted())))}</p>`+hSheet+hLoc;
+}
+function restaurerVersion(d,quand){
+  if(!validConfig(d)){toast('⚠️ Version illisible');return;}
+  if(!confirm('Remettre en place la version du '+dateVersion(quand)+' ?\n'+resumeDonnees(compter(d))+'\n\nLa version actuelle reste récupérable dans cette liste.')) return;
+  versionLocale('Avant restauration',true);
+  cfg=cleanCfg(Object.assign(clone(E.DEFAULT_CONFIG),{indisposV:1},d));
+  cfg.majLe=Date.now();
+  saveConfig();rafraichir();closeForce();
+  if(gsActif()) gsEnvoyer(true,true); else toast('✅ Version restaurée');
+}
+async function restaurerSheet(i){
+  const v=versionsSheet[i]; if(!v) return;
+  try{const j=await gsAppel(null,{action:'sauvegarde',id:v.id});restaurerVersion(j.reglages,v.quand);}
+  catch(e){toast('⚠️ '+e.message);}
+}
+function restaurerLocale(i){
+  const v=versionsLocales()[i]; if(!v) return;
+  try{restaurerVersion(JSON.parse(v.texte),v.quand);}catch(e){toast('⚠️ Version illisible');}
 }
 async function gsCopierScript(){
   try{
