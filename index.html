@@ -260,6 +260,7 @@ td.l{text-align:left}
       </div>
     </div>
     <div id="lib-sum"></div>
+    <label id="lib-filtre-l" style="display:inline-flex;gap:6px;align-items:center;font-size:13px;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="lib-filtre" onchange="libFiltre(this.checked)"/> Afficher uniquement les jours de bloc où des patients sont à donner (MAR absent)</label>
     <div class="tbl-wrap"><table id="lib-tbl" style="min-width:680px"></table></div>
   </div>
 
@@ -1340,7 +1341,13 @@ function libClear(){
   changed();
 }
 function jourCourt(d){return new Date(d+'T00:00:00Z').toLocaleDateString('fr-FR',{weekday:'short',timeZone:'UTC'});}
+const LIB_FILTRE_KEY=STORE_KEY+'_libfiltre';
+function libFiltreActif(){try{return localStorage.getItem(LIB_FILTRE_KEY)==='1';}catch(e){return false;}}
+function libFiltre(on){try{localStorage.setItem(LIB_FILTRE_KEY,on?'1':'0');}catch(e){}renderLib();}
 function renderLib(){
+  const filtre=libFiltreActif();
+  const cb=document.getElementById('lib-filtre'); if(cb) cb.checked=filtre;
+  let nVisTot=0;
   libMenus();
   try{if(!cfg.libSource)cfg.libSource=localStorage.getItem(STORE_KEY+'_libsrc')||'';}catch(e){}
   document.getElementById('lib-src').textContent=cfg.libSource||'';
@@ -1379,6 +1386,8 @@ function renderLib(){
       if(choisi&&possibles.length&&choisi.n>possibles[0].n)
         propo+=`<div style="color:var(--t3)">${esc(possibles[0].t)} aurait moins de patients à donner, mais le retenir obligerait un « Autre MAR » un autre mardi ou jeudi, ou ferait passer GR sous sa part minimale (règles prioritaires).</div>`;
     }
+    let nVis=0;
+    const hDebut=h; // en-tête de la consultation : retiré si aucune ligne n'est affichée (filtre)
     h+=`<tr style="background:var(--bg)"><td class="l" style="white-space:nowrap"><b>${E.labelFR(g.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(g.consult))}</span></td>
       <td class="l" colspan="2" style="font-size:12px">${x.slot?esc(x.slot.label):'—'} · ${nbTot} patient(s)</td>
       <td>${x.med?chip(x.med):'—'}<div style="font-size:10px;color:var(--t3)">en consultation</div></td>
@@ -1391,6 +1400,8 @@ function renderLib(){
       else if(y.aDonner){stat=`<span class="st-warn">🔁 ${esc(y.raison)} — cliquer « Donner… »</span>`;aDon+=l.nb;}
       else if(y.statut==='alerte'){stat=`<span class="st-warn">⚠️ ${esc(y.raison)}</span>`;ko+=l.nb;}
       else{stat=`<span class="st-off">${esc(y.raison)}</span>`;off+=l.nb;}
+      if(filtre&&!(y.aDonner&&!l.donneA)) return; // filtre : seulement les patients à donner
+      nVis++;
       const op=l.donneA||x.med;
       const actions=l.donneA
         ?`<button class="btn" style="padding:2px 8px" onclick="libReprendre('${g.cle}','${l.bloc}','${esc(l.donneA)}')" title="Rendre ces patients au MAR de la consultation">↩ Reprendre</button>`
@@ -1419,7 +1430,10 @@ function renderLib(){
           <div id="don-ind-${cle}" style="font-size:12px;margin-top:6px">${libTexteIndispo(premierDispo,g.consult,l.bloc)}</div></td></tr>`;
       }
     });
+    if(filtre&&!nVis) h=hDebut;
+    nVisTot+=nVis;
   });
+  if(filtre&&rows.length&&!nVisTot) h+=`<tr><td colspan="6" style="color:#1a7f37;padding:14px">✅ Aucun patient à donner : le MAR de chaque consultation est présent au bloc.</td></tr>`;
   if(!rows.length) h+=`<tr><td colspan="6" style="color:var(--t3);padding:14px">Aucun patient libéral.</td></tr>`;
   if(masques) h+=`<tr><td colspan="6" class="l" style="color:var(--t3);font-size:12px;padding:10px">${masques} consultation(s) de ${esc(cfg.titulaires.filter(t=>t.autonome).map(t=>t.code).join(', '))} (autonome) non affichée(s) : ${masquesP} patient(s), assurés seul.</td></tr>`;
   document.getElementById('lib-tbl').innerHTML=h+'</tbody>';
