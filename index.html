@@ -977,9 +977,10 @@ function gsTableaux(){
   });
   const d=E.decompte(result.weeks,'2026-10-01','2026-12-31'), tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
   const T=Object.values(d).reduce((a,b)=>a+b,0)||1;
-  const decompte=[['Praticien','Libérales (mardi + jeudi-C1)','Part des libérales','Total consultations (oct.–déc.)']];
-  [...codes(),E.AUTRE].forEach(k=>decompte.push([k,d[k]||0,Math.round(100*(d[k]||0)/T)+' %',(tot[k]&&tot[k].total)||0]));
-  decompte.push(['Mis à jour le',new Date().toLocaleString('fr-FR'),'','']);
+  const dl=E.decompteLiberaux(result), z={consult:0,bloc:0,donnes:0,recus:0};
+  const decompte=[['Praticien','Libérales (mardi + jeudi-C1)','Part des libérales','Total consultations (oct.–déc.)','Patients libéraux vus en consultation','Patients libéraux opérés au bloc','Patients donnés','Patients reçus']];
+  [...codes(),E.AUTRE].forEach(k=>{const l=dl[k]||z;decompte.push([k,d[k]||0,Math.round(100*(d[k]||0)/T)+' %',(tot[k]&&tot[k].total)||0,l.consult,l.bloc,l.donnes,l.recus]);});
+  decompte.push(['Mis à jour le',new Date().toLocaleString('fr-FR'),'','','','','','']);
   return {planning,decompte};
 }
 async function gsAppel(corps,params){
@@ -1339,6 +1340,18 @@ function jourCourt(d){return new Date(d+'T00:00:00Z').toLocaleDateString('fr-FR'
 const LIB_FILTRE_KEY=STORE_KEY+'_libfiltre';
 function libFiltreActif(){try{return localStorage.getItem(LIB_FILTRE_KEY)==='1';}catch(e){return false;}}
 function libFiltre(on){try{localStorage.setItem(LIB_FILTRE_KEY,on?'1':'0');}catch(e){}renderLib();}
+// Décompte des patients libéraux par praticien
+function libTableDecompte(){
+  const d=E.decompteLiberaux(result);
+  const ms=[...codes(),...Object.keys(d).filter(m=>!codes().includes(m))].filter(m=>d[m]);
+  const tot=k=>ms.reduce((a,m)=>a+d[m][k],0);
+  const cell=(v,coul)=>`<td>${v?`<b${coul?` style="color:${coul}"`:''}>${v}</b>`:'<span style="color:var(--t3)">0</span>'}</td>`;
+  return `<div class="card" style="padding:10px 12px"><b>Décompte par praticien</b> <span style="color:var(--t3);font-size:12px">(patients libéraux du trimestre)</span>
+    <div class="tbl-wrap" style="margin-top:6px"><table style="min-width:520px"><thead><tr><th class="l">MAR</th><th>Vus en consultation</th><th>Opérés au bloc</th><th>Donnés</th><th>Reçus</th><th>À donner</th></tr></thead><tbody>
+    ${ms.map(m=>`<tr><td class="l">${chip(m)}${estAutonome(m)?' <span style="font-size:11px;color:var(--t3)">autonome</span>':''}</td>${cell(d[m].consult)}${cell(d[m].bloc)}${cell(d[m].donnes)}${cell(d[m].recus)}${cell(d[m].aDonner,'#9a6700')}</tr>`).join('')}
+    <tr style="background:var(--bg)"><td class="l"><b>Total</b></td>${cell(tot('consult'))}${cell(tot('bloc'))}${cell(tot('donnes'))}${cell(tot('recus'))}${cell(tot('aDonner'),'#9a6700')}</tr>
+    </tbody></table></div></div>`;
+}
 function renderLib(){
   const filtre=libFiltreActif();
   const cb=document.getElementById('lib-filtre'); if(cb) cb.checked=filtre;
@@ -1438,7 +1451,7 @@ function renderLib(){
     <div class="stat" style="border-top:3px solid #d4a72c"><div class="stat-l">À donner</div><div class="stat-v">${aDon}</div><div class="stat-s">MAR de la consultation absent ce jour de bloc</div></div>
     <div class="stat" style="border-top:3px solid var(--red)"><div class="stat-l">À vérifier</div><div class="stat-v">${ko}</div><div class="stat-s">Autre MAR, date incohérente…</div></div>
     <div class="stat"><div class="stat-l">Sans objet</div><div class="stat-v">${off}</div><div class="stat-s">vendredi, férié, hors période</div></div>
-  </div><div style="text-align:right;margin-bottom:8px"><button class="btn btn-r" onclick="libClear()">Effacer tout</button></div>`:'';
+  </div>${libTableDecompte()}<div style="text-align:right;margin-bottom:8px"><button class="btn btn-r" onclick="libClear()">Effacer tout</button></div>`:'';
 }
 
 // ── Code d'accès ────────────────────────────────────────────

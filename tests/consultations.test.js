@@ -516,3 +516,26 @@ test('patients libéraux sur la consultation 2 du jeudi', () => {
   // Sans créneau précisé, un jeudi reste sur Jeu. C1
   assert.equal(E.liberaleStatus(withLib([{ consult: '2026-11-26', bloc: '2026-11-30' }]))[0].slot.id, 'jeu1');
 });
+
+test('décompte des patients libéraux par praticien (consultation, bloc, donnés, reçus)', () => {
+  const base = E.generate(cfg4());
+  const w = base.weeks.find(v => v.monday === '2026-11-23');
+  const x = w.slots.mar.med, z = w.slots.jeu1.med;
+  const y = ['RW', 'SG', 'AB'].find(t => t !== x && !(base.config.indispos[t] || []).includes('2026-12-01') && !(base.config.indispos[t] || []).includes('2026-11-24'));
+  const r = E.generate(Object.assign(cfg4([
+    { consult: '2026-11-24', bloc: '2026-12-01', nb: 3 },
+    { consult: '2026-11-24', bloc: '2026-12-01', nb: 2, donneA: y },
+    { consult: '2026-11-26', bloc: '2026-12-02', nb: 4 },
+    { consult: '2027-01-05', bloc: '2027-01-06', nb: 9 }, // hors période : non compté
+  ]), { overrides: Object.assign({}, E.DEFAULT_CONFIG.overrides, { '2026-11-23': { mar: x, jeu1: z } }) }));
+  const d = E.decompteLiberaux(r);
+  const tot = k => Object.values(d).reduce((a, v) => a + v[k], 0);
+  assert.equal(tot('consult'), 9);
+  assert.equal(tot('donnes'), 2);
+  assert.equal(tot('recus'), 2);
+  assert.equal(d[x].donnes, 2);
+  assert.equal(d[y].recus, 2);
+  assert.equal(d[x].consult, 5 + (x === z ? 4 : 0));
+  assert.equal(tot('bloc') + tot('aDonner'), 9, 'chaque patient compté une fois : assuré au bloc ou encore à donner');
+  assert.ok(r.config.codes.every(c => d[c]), 'tous les MAR présents dans le décompte');
+});
