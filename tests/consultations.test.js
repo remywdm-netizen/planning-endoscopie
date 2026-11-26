@@ -40,7 +40,8 @@ test('report de bloc : praticien du mardi exclu le lundi suivant', () => {
 test('jours fériés sans consultation ni report de bloc', () => {
   assert.equal(slot('2026-11-16', 'jeu1').med, null);
   assert.equal(slot('2026-11-16', 'jeu2').med, null);
-  assert.equal(slot('2026-12-07', 'mar').med, null);
+  // Mardi 08/12 férié : remplacé par la Lun. C1 du 07/12 (voir test dédié)
+  assert.equal(slot('2026-12-07', 'mar').date, '2026-12-07');
   // Pas de report depuis le 19/11 → personne n'est exclu « au bloc » le mardi 24/11 à cause du 19/11
   Object.values(slot('2026-11-23', 'mar').exclus).forEach(r => assert.doesNotMatch(r, /19\/11/));
   // Lundi 2 novembre férié (Toussaint reportée)
@@ -538,4 +539,39 @@ test('décompte des patients libéraux par praticien (consultation, bloc, donné
   assert.equal(d[x].consult, 5 + (x === z ? 4 : 0));
   assert.equal(tot('bloc') + tot('aDonner'), 9, 'chaque patient compté une fois : assuré au bloc ou encore à donner');
   assert.ok(r.config.codes.every(c => d[c]), 'tous les MAR présents dans le décompte');
+});
+
+test('mardi 08/12 férié : la Lun. C1 du 07/12 compte comme le mardi', () => {
+  const w = week('2026-12-07');
+  const m = w.slots.mar, l1 = w.slots.lun1;
+  assert.equal(m.date, '2026-12-07');
+  assert.equal(m.deplaceDe, '2026-12-08');
+  assert.ok(E.isTitulaire(m.med), 'titulaire obligatoire : ' + m.med);
+  assert.equal(l1.fusion, 'mar');
+  assert.equal(l1.med, null, 'pas de Lun. C1 séparée ce jour-là');
+  assert.notEqual(m.med, w.slots.jeu1.med, 'pas le même MAR que le jeudi-C1');
+  assert.notEqual(m.med, w.slots.lun2.med, 'une seule consultation par après-midi');
+  // Report : au bloc le lundi suivant (14/12), comme pour un mardi
+  assert.equal(E.reportDe('mar', '2026-12-07'), '2026-12-14');
+  assert.equal(m.reportBloc, '2026-12-14');
+  // Compté au décompte
+  const d = E.decompte([w]);
+  assert.equal(d[m.med] >= 1, true);
+  // Un MAR indisponible le 14/12 n'est pas retenu
+  const cfg = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cfg.indispos.SG = (cfg.indispos.SG || []).filter(x => x !== '2026-12-14');
+  cfg.indispos.GR = (cfg.indispos.GR || []).concat(['2026-12-14']);
+  const r = E.generate(cfg);
+  const m2 = r.weeks.find(x => x.monday === '2026-12-07').slots.mar;
+  assert.notEqual(m2.med, 'GR');
+  assert.match(m2.exclus.GR || '', /14\/12/);
+  assert.deepEqual(E.verify(r), []);
+  // Patient libéral saisi sur la Lun. C1 du 07/12 : rattaché au « mardi »
+  assert.equal(E.creneauLib({ consult: '2026-12-07', bloc: '2026-12-10' }), 'mar');
+  assert.equal(E.creneauLib({ consult: '2026-12-07', slot: 'lun2', bloc: '2026-12-10' }), 'lun2');
+  assert.equal(E.creneauLib({ consult: '2026-11-30', bloc: '2026-12-03' }), 'lun1');
+  // Forçage d'un MAR sur ce « mardi » : clé du lundi 07/12
+  const cf = JSON.parse(JSON.stringify(E.DEFAULT_CONFIG));
+  cf.overrides['2026-12-07'] = { mar: 'RW' };
+  assert.equal(E.generate(cf).weeks.find(x => x.monday === '2026-12-07').slots.mar.med, 'RW');
 });

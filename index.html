@@ -514,12 +514,14 @@ function renderForces(){
 let forceCtx=null;
 function openForce(monday,slotId){
   const w=result.weeks.find(x=>x.monday===monday);
-  const s=E.SLOTS.find(x=>x.id===slotId);
+  let s=E.SLOTS.find(x=>x.id===slotId);
   const c=w.slots[slotId];
+  if(c.fusion) return openForce(monday,c.fusion); // Lun. C1 qui compte comme le mardi
   if(c.ferie||c.horsPeriode) return;
   const passe=!!c.fige; // journée passée : correction manuelle de ce qui a été fait
   forceCtx={monday,slotId,passe,date:c.date};
   const forced=passe?(cfg.figes[c.date+'|'+slotId]||null):((cfg.overrides[monday]||{})[slotId]||null);
+  const s0=s; s=c.deplaceDe?{jour:'Lundi',label:'Lun. C1 (= mardi, '+E.labelFR(c.deplaceDe)+' férié)'}:s0;
   document.getElementById('modal-title').innerHTML=passe
     ?`🔒 ${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Journée passée : corriger ce qui a été fait (actuellement : ${c.ferme?'fermé':c.med?esc(c.med):'—'})</small>`
     :`${esc(s.jour)} ${E.labelFR(c.date)} — ${esc(s.label)}<small>Actuellement : ${c.ferme?'fermé':(c.med?esc(c.med):'—')+(forced?' (forcé)':' (automatique)')}</small>`;
@@ -593,6 +595,8 @@ function renderPlan(){
     h+=`<tr${sep}><td class="wk"><span class="lg">${weekLabel(w.monday)}</span><span class="sh">${E.labelFR(w.monday)}</span><small>${MOIS[m]} 2026${w.override?' · référence':''}</small></td>`;
     E.SLOTS.forEach(s=>{
       const c=w.slots[s.id];
+      // Créneau fusionné (ex. Lun. C1 du 07/12 qui devient le mardi, 08/12 férié)
+      if(c.fusion){h+=`<td class="ferie cellbtn" onclick="openForce('${w.monday}','${c.fusion}')" title="Cette consultation compte comme le mardi (férié) : voir la colonne Mardi — cliquer pour forcer un praticien">→ <span class="lg">compte comme le </span>Mardi<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.fige){h+=`<td class="passe cellbtn" title="Journée passée : planning figé, non recalculé — cliquer pour corriger" onclick="openForce('${w.monday}','${s.id}')">${c.ferme?'🚫':c.med?chip(c.med):'—'}<span class="cell-d">🔒 ${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferme){h+=`<td class="ferie cellbtn forced" title="Créneau fermé — cliquer pour rouvrir" onclick="openForce('${w.monday}','${s.id}')">🚫<span class="lg"> Fermé</span><span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
       if(c.ferie){h+=`<td class="ferie" title="${esc(c.ferie)}">Férié<span class="cell-d">${E.labelFR(c.date)}</span></td>`;return;}
@@ -603,7 +607,9 @@ function renderPlan(){
       const nb=(c.blocs||[]).length?(cfg.liberales||[]).filter(l=>l.consult===c.date&&E.creneauLib(l)===s.id&&l.bloc>l.consult&&!l.donneA).reduce((a,l)=>a+(l.nb||1),0):0;
       const pres=nb>0;
       const ptip=pres?`\n🩺 ${nb} patient(s) libéral(aux) — bloc le ${c.blocs.map(E.labelFR).join(', ')}`:'';
-      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺<span class="lg"> ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span></span>`:''}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
+      const dep=c.deplaceDe?`<span class="cell-d" style="color:#9a6700">Lun. C1 (${E.labelFR(c.deplaceDe)} férié)</span>`:'';
+      const dtip=c.deplaceDe?`\n📅 Mardi ${E.labelFR(c.deplaceDe)} férié : consultation 1 du lundi ${E.labelFR(c.date)}, au bloc le ${E.labelFR(c.reportBloc||'')}`:'';
+      h+=`<td class="cellbtn${c.force?' forced':''}" title="${esc(tip+dtip+ptip+ftip)}" onclick="openForce('${w.monday}','${s.id}')">${c.med?chip(c.med):'—'}${pres?`<span class="pres">🩺<span class="lg"> ${nb} lib. → bloc ${c.blocs.map(E.labelFR).join(', ')}</span></span>`:''}${dep}<span class="cell-d">${E.labelFR(c.date)}</span></td>`;
     });
     h+='</tr>';
   });
@@ -653,7 +659,7 @@ function renderRules(){
     <b>Consultations libérales (mardi + jeudi-C1)</b> : ${cfg.titulaires.filter(t=>t.part!=null).map(t=>`${esc(t.code)} au moins ${t.part} %`).join(', ')||'aucune part minimale'}${cfg.titulaires.some(t=>t.part!=null)?' (arrondi au créneau supérieur : 30 % de 25 → 8), le reste réparti à égalité':''}.<br/>
     <b>Échange de patients libéraux</b> : possible entre tous les MAR${cfg.titulaires.some(t=>t.autonome)?', sauf '+cfg.titulaires.filter(t=>t.autonome).map(t=>esc(t.code)).join(', ')+' (autonome : assure seul ses patients, ne donne ni ne reçoit)':''} ; le MAR qui reçoit doit être présent le jour de la consultation et au bloc.<br/>
     <b>Équilibrage</b> : priorité 1 mardi + jeudi-C1, priorité 2 lundi-C1 + mercredi, puis rotation simple sur lundi-C2 et jeudi-C2.<br/>
-    <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.<br/>
+    <b>Fériés</b> : ${Object.entries(cfg.feries).map(([d,n])=>`${E.labelFR(d)} (${esc(n)})`).join(', ')} — pas de consultation, pas de report de bloc.${E.DEPLACEMENTS.map(d=>` Mardi ${E.labelFR(E.addDays(d.lundi,1))} férié : la <b>consultation 1 du lundi ${E.labelFR(d.date)}</b> compte comme le mardi (titulaire, décompte, pas le même MAR que le jeudi-C1, bloc le lundi ${E.labelFR(E.reportDe(d.slot,d.date))}).`).join('')}<br/>
     <b>Semaine du 28/09</b> : semaine de référence forcée (mardi = ${esc(ov.mar||'—')}).<br/>
     <b>Forçage</b> : un praticien forcé est conservé tel quel, même hors règles (une alerte est alors affichée) ; les autres créneaux sont recalculés autour.<br/>
     <b>Créneau fermé</b> : pas de consultation, pas de report de bloc, non compté dans le décompte (cliquer sur la case → « Fermer ce créneau »).<br/>
@@ -992,7 +998,7 @@ function gsTableaux(){
   result.weeks.forEach(w=>{
     planning.push([weekLabel(w.monday),w.monday.split('-').reverse().join('/')].concat(E.SLOTS.map(s=>{
       const c=w.slots[s.id];
-      return c.ferme?'Fermé':c.ferie?'Férié':c.horsPeriode?'':(c.med||'')+(c.force&&!c.fige?' (forcé)':'');
+      return c.fusion?'= Mardi':c.deplaceDe&&c.med?c.med+' (lun. '+E.labelFR(c.date)+')':c.ferme?'Fermé':c.ferie?'Férié':c.horsPeriode?'':(c.med||'')+(c.force&&!c.fige?' (forcé)':'');
     })));
   });
   const d=E.decompte(result.weeks,'2026-10-01','2026-12-31'), tot=E.totaux(result.weeks,'2026-10-01','2026-12-31');
@@ -1272,7 +1278,7 @@ function libMenus(){
   result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
     const c=w.slots[s.id];
     if(!E.SLOTS_LIBERAUX.includes(s.id)||c.ferie||c.ferme||c.horsPeriode||c.date<aujourdhui()) return; // jours passés retirés
-    opts.push(`<option value="${c.date}|${s.id}">${libelleJour(c.date)} · ${esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
+    opts.push(`<option value="${c.date}|${s.id}">${libelleJour(c.date)} · ${c.deplaceDe?'Lun. C1 (= mardi)':esc(s.label)} · ${c.med?esc(c.med):'—'}</option>`);
   }));
   selC.innerHTML=opts.join('');
   const auj=new Date().toISOString().slice(0,10);
@@ -1417,7 +1423,7 @@ function renderLib(){
     let nVis=0;
     const hDebut=h; // en-tête de la consultation : retiré si aucune ligne n'est affichée (filtre)
     h+=`<tr style="background:var(--bg)"><td class="l" style="white-space:nowrap"><b>${E.labelFR(g.consult)}</b> <span style="color:var(--t3)">${esc(jourCourt(g.consult))}</span></td>
-      <td class="l" colspan="2" style="font-size:12px">${x.slot?esc(x.slot.label):'—'} · ${nbTot} patient(s)</td>
+      <td class="l" colspan="2" style="font-size:12px">${c&&c.deplaceDe?'Lun. C1 (= mardi)':x.slot?esc(x.slot.label):'—'} · ${nbTot} patient(s)</td>
       <td>${x.med?chip(x.med):'—'}<div style="font-size:10px;color:var(--t3)">en consultation</div></td>
       <td class="l" colspan="2" style="font-size:11px;color:var(--t2)">${propo}</td></tr>`;
     lignes.forEach(l=>{
@@ -1518,7 +1524,7 @@ function figerPasse(){
   let n=0;
   result.weeks.forEach(w=>E.SLOTS.forEach(s=>{
     const c=w.slots[s.id];
-    if(c.date>=auj||c.ferie||c.horsPeriode) return;
+    if(c.date>=auj||c.ferie||c.horsPeriode||c.fusion) return;
     const k=c.date+'|'+s.id;
     if(f[k]) return;
     const v=c.ferme?E.FERME:c.med;

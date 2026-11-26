@@ -79,8 +79,10 @@
       jours.push({
         date,
         ferie,
+        // Créneau déplacé (ex. mardi 08/12 férié → Lun. C1 du 07/12) : affiché à la place du créneau fusionné
         consult: ferie ? [] : ['lun1', 'lun2', 'mar', 'mer', 'jeu1', 'jeu2']
-          .map(id => week.slots[id]).filter(s => s.date === date).map(s => s.med || ''),
+          .map(id => week.slots[id]).filter(s => s.date === date && !s.deplaceDe)
+          .map(s => (s.fusion ? week.slots[s.fusion].med : s.med) || ''),
         bloc: [],      // [code, raison]
         absents: codes.filter(t => (cfg.indispos[t] || []).includes(date)),
         nbSlots: slots.length,
@@ -91,7 +93,7 @@
     weeks.forEach(w => Object.entries(w.slots).forEach(([id, s]) => {
       if (!s.med || s.med === 'Autre MAR') return; // praticien externe nommé (ex. AFR) compris
       const cibles = [];
-      if (report[id] != null) cibles.push(ajoute(s.date, report[id]));
+      if (report[id] != null) cibles.push(s.reportBloc !== undefined ? s.reportBloc : ajoute(s.date, report[id]));
       (s.blocs || []).forEach(b => cibles.push(b));
       cibles.forEach(c => {
         const j = jours.find(x => x.date === c);
