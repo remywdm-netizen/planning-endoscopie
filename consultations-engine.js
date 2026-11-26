@@ -29,12 +29,38 @@
     jeu1: { offset: 5, cible: 'Mardi suivant' },  // jeudi-C1 → mardi suivant
   };
 
+  // Créneaux déplacés : le mardi férié est remplacé par la consultation 1 du lundi.
+  // Ce jour-là, la Lun. C1 « devient » le mardi : titulaire obligatoire, comptée au
+  // décompte, pas le même MAR que le jeudi-C1, MAR au bloc le lundi suivant.
+  // Dans les résultats, le créneau « mar » porte la date du lundi, et « lun1 » est fusionné.
+  const DEPLACEMENTS = [
+    { lundi: '2026-12-07', slot: 'mar', date: '2026-12-07', remplace: 'lun1' }, // 08/12 férié
+  ];
+  const deplacement = (monday, id) => DEPLACEMENTS.find(d => d.lundi === monday && d.slot === id);
+  const fusionne = (monday, id) => DEPLACEMENTS.find(d => d.lundi === monday && d.remplace === id);
+  // Date réelle d'un créneau dans la semaine du lundi donné
+  function dateSlot(monday, s) {
+    const d = deplacement(monday, s.id);
+    return d ? d.date : addDays(monday, s.dow);
+  }
+  // Jour de bloc de report d'un créneau (calculé depuis sa date habituelle)
+  function reportDe(id, date) {
+    if (!REPORT_BLOC[id]) return null;
+    const d = DEPLACEMENTS.find(x => x.slot === id && x.date === date);
+    const s = SLOTS.find(x => x.id === id);
+    return addDays(d ? addDays(d.lundi, s.dow) : date, REPORT_BLOC[id].offset);
+  }
+
   // Créneau de consultation libérale selon le jour (0 = lundi … 3 = jeudi).
   const SLOT_LIBERALE = { 0: 'lun1', 1: 'mar', 2: 'mer', 3: 'jeu1' };   // créneau libéral par défaut
   const SLOTS_LIBERAUX = ['lun1', 'lun2', 'mar', 'mer', 'jeu1', 'jeu2'];       // créneaux pouvant recevoir des libéraux
   // Clé d'une consultation libérale : date + créneau (lundi : C1 ou C2)
   const dowDe = iso => (new Date(iso + 'T00:00:00Z').getUTCDay() + 6) % 7;
-  const creneauLib = l => (l.slot && SLOTS_LIBERAUX.includes(l.slot) ? l.slot : SLOT_LIBERALE[dowDe(l.consult)]);
+  const creneauLib = l => {
+    const s0 = l.slot && SLOTS_LIBERAUX.includes(l.slot) ? l.slot : SLOT_LIBERALE[dowDe(l.consult)];
+    const d = DEPLACEMENTS.find(x => x.date === l.consult && x.remplace === s0);
+    return d ? d.slot : s0; // ex. Lun. C1 du 07/12 → créneau « mar »
+  };
   const cleLib = (date, slotId) => date + '|' + slotId;
 
   function days(month, list) {
@@ -225,7 +251,7 @@
     const f = Object.assign({}, cfg.overrides[monday] || {});
     const figes = cfg.figes || {};
     SLOTS.forEach(s => {
-      const v = figes[cleLib(addDays(monday, s.dow), s.id)];
+      const v = figes[cleLib(dateSlot(monday, s), s.id)];
       if (v) f[s.id] = v;
     });
     return f;
@@ -258,9 +284,11 @@
       const forces = forcesSemaine(cfg, monday);
       const sl = ['mar', 'jeu1'].map(id => {
         const s = SLOTS.find(x => x.id === id);
-        const date = addDays(monday, s.dow);
+        const date = dateSlot(monday, s);
         const actif = !cfg.feries[date] && date <= cfg.end && forces[id] !== FERME;
-        return { id, date, actif, force: actif && forces[id] ? forces[id] : null };
+        // Mardi : le MAR du jeudi-C1 précédent est au bloc ce jour-là (sauf mardi déplacé)
+        const apresJeu = id === 'mar' && date === addDays(monday, 1);
+        return { id, date, actif, apresJeu, force: actif && forces[id] ? forces[id] : null };
       });
       const actifs = sl.filter(x => x.actif);
       actifs.forEach(x => { if (x.date >= cfg.debutDecompte) total++; });
@@ -276,7 +304,7 @@
         // Obligatoire : présent le jour de la consultation et le jour de bloc de report.
         // Patients libéraux : un MAR absent un de leurs jours de bloc reste possible,
         // mais ces patients sont « à donner » (coût) — sauf MAR autonome (exclu).
-        const rep = addDays(x.date, REPORT_BLOC[x.id].offset);
+        const rep = reportDe(x.id, x.date);
         const cle = cleLib(x.date, x.id);
         const ok = codes.filter(t => !indispo[t].has(x.date) && (cfg.feries[rep] || !indispo[t].has(rep))
           && !(cfg.autonomes.has(t) && (cfg.consultAvecDon.has(cle) || patientsADonner(cfg, indispo[t], cle, t) > 0)));
@@ -306,7 +334,7 @@
       const suivants = new Map();
       etats.forEach(e => {
         mar.options.forEach(m => {
-          if (m && m !== AUTRE && !mar.force && m === e.prev) return; // au bloc le mardi (report du jeudi-C1)
+          if (m && m !== AUTRE && !mar.force && mar.apresJeu && m === e.prev) return; // au bloc le mardi (report du jeudi-C1)
           jeu.options.forEach(j => {
             if (m && j && m !== AUTRE && m === j) return;              // pas mardi ET jeudi-C1
             const n = e.n.slice();
@@ -400,14 +428,17 @@
 
       // Contexte de chaque créneau
       const ctx = SLOTS.map(s => {
-        const date = addDays(monday, s.dow);
+        const date = dateSlot(monday, s);
         const info = { slot: s, date, ferie: cfg.feries[date] || null, horsPeriode: date > cfg.end };
-        info.ferme = !info.ferie && !info.horsPeriode && forces[s.id] === FERME;
-        info.force = !info.ferie && !info.horsPeriode && !info.ferme && forces[s.id] ? forces[s.id] : null;
+        const fus = fusionne(monday, s.id), dep = deplacement(monday, s.id);
+        if (fus) info.fusion = fus.slot;                            // ex. Lun. C1 du 07/12 : devient le mardi
+        if (dep) info.deplaceDe = addDays(monday, s.dow);           // ex. mardi 08/12 (férié) → 07/12
+        info.ferme = !info.ferie && !info.horsPeriode && (forces[s.id] === FERME || !!fus);
+        info.force = !info.ferie && !info.horsPeriode && !info.ferme && forces[s.id] && forces[s.id] !== FERME ? forces[s.id] : null;
         const cle = cleLib(date, s.id);
         info.blocs = SLOTS_LIBERAUX.includes(s.id) ? (cfg.libMap[cle] || []) : [];
         // Jour de bloc de report (mardi → lundi suivant, jeudi-C1 → mardi suivant), sauf férié
-        const rep = REPORT_BLOC[s.id] ? addDays(date, REPORT_BLOC[s.id].offset) : null;
+        const rep = reportDe(s.id, date);
         info.reportBloc = rep && !cfg.feries[rep] ? rep : null;
         info.exclus = {};
         codes.forEach(t => {
@@ -441,6 +472,9 @@
           ferie: c.ferie,
           horsPeriode: c.horsPeriode,
           ferme: c.ferme,
+          fusion: c.fusion || null,
+          deplaceDe: c.deplaceDe || null,
+          reportBloc: c.reportBloc,
           exclus: c.exclus,
           blocs: c.blocs,
           aDonner: c.aDonner,
@@ -453,7 +487,7 @@
         if (c.slot.prio === 1) cum._lib++;
         const rep = REPORT_BLOC[c.slot.id];
         if (rep && isTit(who)) {
-          const target = addDays(c.date, rep.offset);
+          const target = reportDe(c.slot.id, c.date);
           if (!blocked[target]) blocked[target] = new Map();
           blocked[target].set(who, `Au bloc (report ${c.slot.label} du ${labelFR(c.date)})`);
         }
@@ -625,7 +659,7 @@
     weeks.forEach(w => Object.keys(REPORT_BLOC).forEach(id => {
       const c = w.slots[id];
       if (!isTit(c.med)) return;
-      const b = addDays(c.date, REPORT_BLOC[id].offset);
+      const b = reportDe(id, c.date);
       if (!cfg.feries[b] && indispo[c.med].has(b)) add(`${labelFR(c.date)} ${id === 'mar' ? 'Mardi' : 'Jeu. C1'} : ${c.med} est au bloc le ${labelFR(b)} (report) mais indisponible ce jour-là`, c);
     }));
     // Patients libéraux confiés : le MAR qui les reçoit doit être disponible et au bloc
@@ -666,7 +700,7 @@
       SLOTS.forEach(s => {
         const c = w.slots[s.id];
         if (REPORT_BLOC[s.id] && isTit(c.med)) {
-          const t = addDays(c.date, REPORT_BLOC[s.id].offset);
+          const t = reportDe(s.id, c.date);
           (blocked[t] = blocked[t] || new Set()).add(c.med);
         }
       });
@@ -757,7 +791,7 @@
   function alertes(result) { return check(result).filter(i => i.force).map(i => i.msg); }
 
   const api = {
-    TITULAIRES, AUTRE, FERME, SLOTS, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, SLOTS_LIBERAUX, creneauLib, REPORT_BLOC, DEFAULT_CONFIG,
+    TITULAIRES, AUTRE, FERME, SLOTS, DEPLACEMENTS, reportDe, patientsADonner, partsLiberales, minimumPart, comptesLiberales, SLOT_LIBERALE, SLOTS_LIBERAUX, creneauLib, REPORT_BLOC, DEFAULT_CONFIG,
     generate, verify, alertes, liberaleStatus, decompteLiberaux, decompte, totaux, addDays, labelFR, renameTitulaire,
     isTitulaire: (m, cfg) => (cfg ? cfg.titulaires.map(t => t.code) : TITULAIRES).includes(m),
   };
