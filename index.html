@@ -1400,10 +1400,7 @@ function renderLib(){
   const slotLib=(date,id)=>{for(const w of result.weeks){const c=w.slots[id];if(c&&c.date===date)return c;}return null;};
   let ok=0,ko=0,off=0,total=0,aDon=0;
   let h=`<thead><tr><th class="l">Consultation</th><th class="l">Jour de bloc</th><th>Patients</th><th>MAR au bloc</th><th class="l">Contrôle</th><th></th></tr></thead><tbody>`;
-  let masques=0, masquesP=0;
   Object.values(groupes).sort((x,y)=>x.cle.localeCompare(y.cle)).forEach(g=>{
-    // Consultations d'un MAR autonome (GR) : non affichées, il gère seul ses patients
-    if(estAutonome(g.statut.med)){masques++;masquesP+=Object.values(g.lignes).reduce((a,l)=>a+l.nb,0);return;}
     const x=g.statut, lignes=Object.values(g.lignes).sort((p,q)=>(p.bloc+p.donneA).localeCompare(q.bloc+q.donneA));
     const nbTot=lignes.reduce((a,l)=>a+l.nb,0);
     // Proposition : patients à donner selon le MAR (règles du mardi / jeudi-C1 d'abord)
@@ -1469,7 +1466,6 @@ function renderLib(){
   });
   if(filtre&&rows.length&&!nVisTot) h+=`<tr><td colspan="6" style="color:#1a7f37;padding:14px">✅ Aucun patient à donner : le MAR de chaque consultation est présent au bloc.</td></tr>`;
   if(!rows.length) h+=`<tr><td colspan="6" style="color:var(--t3);padding:14px">Aucun patient libéral.</td></tr>`;
-  if(masques) h+=`<tr><td colspan="6" class="l" style="color:var(--t3);font-size:12px;padding:10px">${masques} consultation(s) de ${esc(cfg.titulaires.filter(t=>t.autonome).map(t=>t.code).join(', '))} (autonome) non affichée(s) : ${masquesP} patient(s), assurés seul.</td></tr>`;
   document.getElementById('lib-tbl').innerHTML=h+'</tbody>';
   document.getElementById('lib-sum').innerHTML=rows.length?`<div class="stats">
     <div class="stat"><div class="stat-l">Patients</div><div class="stat-v">${total}</div></div>
